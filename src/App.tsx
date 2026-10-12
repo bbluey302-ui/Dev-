@@ -9,24 +9,12 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { LessonPlayer } from './components/LessonPlayer';
 import { CapstoneAuditModal } from './components/CapstoneAuditModal';
 import { DialectModal } from './components/DialectModal';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { AdminAuthProvider } from './components/admin/AdminAuthContext';
 import { UserProfile, Lesson, TargetDialect, Module, DayActivity } from './types';
 import { INITIAL_MODULES, DEFAULT_WEEKLY_ACTIVITY } from './data/curriculumData';
 import { ThemeProvider } from './context/ThemeContext';
 import { addNotification } from './utils/notificationService';
 
 export default function App() {
-  const [appMode, setAppMode] = useState<'learner' | 'admin'>(() => {
-    if (typeof window !== 'undefined') {
-      const path = window.location.pathname;
-      const search = window.location.search;
-      if (path.startsWith('/admin') || search.includes('view=admin')) {
-        return 'admin';
-      }
-    }
-    return 'learner';
-  });
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [modules, setModules] = useState<Module[]>(INITIAL_MODULES);
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
@@ -75,22 +63,36 @@ export default function App() {
     localStorage.setItem('sultiai_user_profile', JSON.stringify(profile));
   }, [profile]);
 
-  // Synchronize URL query parameter with active application mode
+  // Sync learner progress to Supabase through the LEARNER backend on every
+  // change. The separate ADMIN backend reads this same row (and the console
+  // live-subscribes via Supabase Realtime), so the admin reflects real activity.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const url = new URL(window.location.href);
-        if (appMode === 'admin') {
-          url.searchParams.set('view', 'admin');
-        } else {
-          url.searchParams.delete('view');
-        }
-        window.history.replaceState({}, '', url.toString());
-      } catch {
-        // ignore in non-browser environments
-      }
-    }
-  }, [appMode]);
+    const timer = setTimeout(() => {
+      fetch('/api/learner/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          role: 'Capstone Lead / Learner',
+          targetDialect: profile.targetDialect,
+          xp: profile.xp,
+          streakDays: profile.streakDays,
+          hearts: profile.hearts,
+          todayMinutes: profile.todayMinutes,
+          dailyGoalMinutes: profile.dailyGoalMinutes,
+          speechScoreAverage: profile.speechScoreAverage,
+          vocabularyMastered: profile.vocabularyMastered,
+          status: 'ACTIVE',
+          lastActive: 'Just now',
+        }),
+      }).catch(() => {
+        // Learner backend offline or Supabase unconfigured — ignore.
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [profile]);
 
   // Find the next recommended incomplete lesson
   const allLessons = modules.flatMap((m) => m.lessons || []);
@@ -291,62 +293,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#0A121D] text-stone-900 dark:text-stone-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white transition-colors duration-200">
-        {/* Global Dual-App Platform Switcher Bar */}
-        <div className="bg-stone-900 text-white px-3 sm:px-6 py-2 text-xs flex flex-wrap items-center justify-between gap-2 border-b border-stone-800 shrink-0 z-50">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-extrabold tracking-wide text-stone-200">SultiAI Dual-App System</span>
-            <span className="text-stone-400 hidden md:inline text-[11px]">· 1 Codebase, 1 Server, 2 Apps (Mobile Learner + Web Admin)</span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1 bg-stone-800/90 p-1 rounded-xl border border-stone-700">
-              <button
-                onClick={() => setAppMode('learner')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${
-                  appMode === 'learner'
-                    ? 'bg-teal-600 text-white shadow-sm'
-                    : 'text-stone-400 hover:text-stone-200'
-                }`}
-              >
-                📱 Mobile Learner App
-              </button>
-              <button
-                onClick={() => setAppMode('admin')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${
-                  appMode === 'admin'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-stone-400 hover:text-stone-200'
-                }`}
-              >
-                🖥️ Admin Web Dashboard & Audit
-              </button>
-            </div>
-
-            <a
-              href="?view=admin"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Open Admin Dashboard in full browser desktop window"
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border border-stone-700 hidden sm:inline-flex items-center gap-1 transition-all"
-            >
-              <span>↗ Full Window</span>
-            </a>
-          </div>
-        </div>
-
-        {appMode === 'admin' ? (
-          <div className="flex-1 w-full">
-            <AdminAuthProvider>
-              <AdminDashboard 
-                onSwitchToMobileApp={() => setAppMode('learner')} 
-                initialRoute={typeof window !== 'undefined' ? window.location.pathname : 'dashboard'}
-              />
-            </AdminAuthProvider>
-          </div>
-        ) : (
-          <>
-            {/* Top Mobile App Bar */}
+        {/* Top Mobile App Bar */}
             <TopHeader
               streak={profile.streakDays}
               xp={profile.xp}
@@ -355,14 +302,12 @@ export default function App() {
               dialect={profile.targetDialect}
               onOpenDialectModal={() => setShowDialectModal(true)}
               onOpenAuditModal={() => setShowAuditModal(true)}
-              onOpenAdminApp={() => setAppMode('admin')}
               onRefillHearts={handleRefillHearts}
               userName={profile.name}
               showHeroGreeting={currentTab === 'home'}
               onNavigateAction={(actionType) => {
                 if (actionType === 'learn') setCurrentTab('learn');
                 else if (actionType === 'profile') setCurrentTab('profile');
-                else if (actionType === 'admin') setAppMode('admin');
               }}
             />
 
@@ -449,8 +394,6 @@ export default function App() {
           onClose={() => setShowDialectModal(false)}
         />
       )}
-          </>
-        )}
       </div>
   </ThemeProvider>
   );

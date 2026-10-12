@@ -7,6 +7,11 @@ import http from 'http';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Modality, type LiveServerMessage } from '@google/genai';
 import { WebSocketServer, WebSocket } from 'ws';
+import {
+  writeAuditLog,
+  upsertLearnerAccount,
+  isSupabaseServerConfigured,
+} from './server/supabaseServer';
 
 dotenv.config();
 
@@ -14,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3030;
 
 app.use(express.json({ limit: '50mb' }));
 
@@ -134,373 +139,96 @@ function calculateWer(hyp: string, ref: string): { wer: number; accuracy: number
 }
 
 // ----------------------------------------------------------------------------
-// Audit Log & System Control Data Store
+// Telemetry & Admin data are handled by Supabase (single source of truth)
 // ----------------------------------------------------------------------------
+// The learner backend writes telemetry to the Supabase `audit_logs` table and
+// mirrors learner progress to `learner_accounts`. The Admin data + /api/admin/*
+// endpoints live in the SEPARATE admin backend (admin-server.ts, :3001) and are
+// intentionally NOT defined here. This keeps the two backends fully decoupled:
+// they never call each other, they only share Supabase.
 
-interface AuditLogEntry {
-  id: string;
-  timestamp: string;
+function logAuditEvent(entry: {
   eventType: string;
   category: 'AI_INFERENCE' | 'SPEECH_WER' | 'LEARNING_ACTIVITY' | 'SECURITY_RLS' | 'SYSTEM_CONFIG';
-  actor: string;
-  actorRole: string;
+  actor?: string;
+  actorRole?: string;
   description: string;
-  severity: 'INFO' | 'SUCCESS' | 'WARNING' | 'CRITICAL';
+  severity?: 'INFO' | 'SUCCESS' | 'WARNING' | 'CRITICAL';
   latencyMs?: number;
   metadata?: Record<string, any>;
+}) {
+  // Persist to Supabase so the Admin backend + live console receive it.
+  void writeAuditLog({
+    userId: entry.actor,
+    eventType: entry.eventType,
+    category: entry.category,
+    actor: entry.actor || 'system',
+    actorRole: entry.actorRole || 'System',
+    description: entry.description,
+    severity: entry.severity || 'INFO',
+    latencyMs: entry.latencyMs,
+    metadata: entry.metadata,
+  });
 }
-
-interface SystemConfig {
-  activeGeminiModel: string;
-  whisperWerThreshold: number;
-  bertConfidenceThreshold: number;
-  maintenanceMode: boolean;
-  rateLimitPerMin: number;
-  groundingMapsEnabled: boolean;
-  groundingSearchEnabled: boolean;
-}
-
-let systemConfig: SystemConfig = {
-  activeGeminiModel: 'gemini-3.8-flash',
-  whisperWerThreshold: 15,
-  bertConfidenceThreshold: 0.85,
-  maintenanceMode: false,
-  rateLimitPerMin: 60,
-  groundingMapsEnabled: true,
-  groundingSearchEnabled: true,
-};
-
-let auditLogs: AuditLogEntry[] = [
-  {
-    id: 'log_001',
-    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-    eventType: 'SYSTEM_STARTUP',
-    category: 'SYSTEM_CONFIG',
-    actor: 'system_daemon',
-    actorRole: 'System Daemon',
-    description: 'SultiAI Dual-App Server initialized on 0.0.0.0:3000 with WebSocket Live Voice support',
-    severity: 'INFO',
-    latencyMs: 12,
-    metadata: { port: 3000, version: '1.2.0-rc', environment: 'production' }
-  },
-  {
-    id: 'log_002',
-    timestamp: new Date(Date.now() - 3600000 * 1.8).toISOString(),
-    eventType: 'SECURITY_RLS_CHECK',
-    category: 'SECURITY_RLS',
-    actor: 'usr_genesis',
-    actorRole: 'Learner',
-    description: 'Row Level Security policy passed for profile genesis.diaz@jmc.edu.ph',
-    severity: 'SUCCESS',
-    latencyMs: 18,
-    metadata: { policy: 'enforce_rls_profiles', authenticated: true }
-  },
-  {
-    id: 'log_003',
-    timestamp: new Date(Date.now() - 3600000 * 1.2).toISOString(),
-    eventType: 'BERT_INTENT_CLASSIFIED',
-    category: 'AI_INFERENCE',
-    actor: 'usr_genesis',
-    actorRole: 'Learner',
-    description: 'mBERT classified utterance: "Palihog ko sa plete, Nong." -> fare_navigation_jeepney',
-    severity: 'SUCCESS',
-    latencyMs: 24,
-    metadata: { predictedIntent: 'fare_navigation_jeepney', confidence: 0.97, dialect: 'Davao Bisaya' }
-  },
-  {
-    id: 'log_004',
-    timestamp: new Date(Date.now() - 3600000 * 0.8).toISOString(),
-    eventType: 'WHISPER_WER_EVALUATED',
-    category: 'SPEECH_WER',
-    actor: 'usr_genesis',
-    actorRole: 'Learner',
-    description: 'Whisper STT Word Error Rate measured: 11.2% WER (88.8% acoustic accuracy)',
-    severity: 'INFO',
-    latencyMs: 310,
-    metadata: { targetPhrase: 'Maayong buntag kanimo', accuracy: 89, wer: 11 }
-  },
-  {
-    id: 'log_005',
-    timestamp: new Date(Date.now() - 3600000 * 0.4).toISOString(),
-    eventType: 'LESSON_COMPLETED',
-    category: 'LEARNING_ACTIVITY',
-    actor: 'usr_genesis',
-    actorRole: 'Learner',
-    description: 'Learner completed lesson "Morning, Noon, and Evening Greetings" (+35 XP awarded)',
-    severity: 'SUCCESS',
-    latencyMs: 45,
-    metadata: { lessonId: 'les_1_1', score: 100, earnedXp: 35 }
-  },
-  {
-    id: 'log_006',
-    timestamp: new Date(Date.now() - 60000 * 15).toISOString(),
-    eventType: 'CONFIG_AUDIT_VERIFIED',
-    category: 'SYSTEM_CONFIG',
-    actor: 'admin_panel',
-    actorRole: 'System Administrator',
-    description: 'BSIT Capstone Defense Verification Checklist synced (11/11 criteria passing)',
-    severity: 'SUCCESS',
-    latencyMs: 15,
-    metadata: { verifiedCriteria: 11, defenseReadiness: 'READY_FOR_DEFENSE' }
-  }
-];
-
-function logAuditEvent(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>) {
-  const newEntry: AuditLogEntry = {
-    id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-    timestamp: new Date().toISOString(),
-    ...entry
-  };
-  auditLogs.unshift(newEntry);
-  if (auditLogs.length > 250) {
-    auditLogs.pop();
-  }
-  return newEntry;
-}
-
-// Mock Learners list for admin management
-let adminLearners = [
-  {
-    id: 'usr_genesis',
-    name: 'Genesis Diaz',
-    email: 'genesis.diaz@jmc.edu.ph',
-    role: 'Capstone Lead / Learner',
-    targetDialect: 'davao_bisaya',
-    xp: 420,
-    streakDays: 7,
-    hearts: 5,
-    todayMinutes: 8,
-    dailyGoalMinutes: 15,
-    speechScoreAverage: 91,
-    vocabularyMastered: 38,
-    status: 'ACTIVE',
-    lastActive: 'Just now'
-  },
-  {
-    id: 'usr_mark',
-    name: 'Mark Chen',
-    email: 'mark.chen@student.jmc.edu.ph',
-    role: 'Non-Native Transferee',
-    targetDialect: 'cebuano_standard',
-    xp: 310,
-    streakDays: 4,
-    hearts: 4,
-    todayMinutes: 12,
-    dailyGoalMinutes: 15,
-    speechScoreAverage: 86,
-    vocabularyMastered: 26,
-    status: 'ACTIVE',
-    lastActive: '25 mins ago'
-  },
-  {
-    id: 'usr_sarah',
-    name: 'Sarah Jenkins',
-    email: 'sarah.j@exchange.edu.ph',
-    role: 'International Exchange Student',
-    targetDialect: 'boholano',
-    xp: 280,
-    streakDays: 5,
-    hearts: 5,
-    todayMinutes: 15,
-    dailyGoalMinutes: 15,
-    speechScoreAverage: 84,
-    vocabularyMastered: 22,
-    status: 'ACTIVE',
-    lastActive: '1 hour ago'
-  },
-  {
-    id: 'usr_rhea',
-    name: 'Rhea Santos',
-    email: 'rhea.santos@jmc.edu.ph',
-    role: 'Peer Tutor / Native Contributor',
-    targetDialect: 'davao_bisaya',
-    xp: 890,
-    streakDays: 14,
-    hearts: 5,
-    todayMinutes: 22,
-    dailyGoalMinutes: 20,
-    speechScoreAverage: 98,
-    vocabularyMastered: 95,
-    status: 'ACTIVE',
-    lastActive: '3 hours ago'
-  }
-];
 
 // ----------------------------------------------------------------------------
-// API Routes
+// Learner Backend API: health + learner progress sync to Supabase
 // ----------------------------------------------------------------------------
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    project: 'SultiAI Capstone & Admin Portal',
+    service: 'SultiAI Learner Backend',
+    project: 'SultiAI Capstone',
     institution: 'Jose Maria College Foundation, Inc.',
-    version: '1.2.0-rc',
+    version: '2.0.0',
     geminiConfigured: Boolean(ai),
-    supabaseBackend: 'Supabase PostgreSQL & Storage',
-    adminApiActive: true,
-    totalAuditLogs: auditLogs.length,
+    supabaseConfigured: isSupabaseServerConfigured,
+    adminBackend: `${process.env.ADMIN_PORT || 5000}`,
   });
 });
 
-// Admin: Get Audit Logs with search & filtering
-app.get('/api/admin/audit-logs', (req: Request, res: Response) => {
-  const { category, severity, search, limit = '100' } = req.query;
-  let filtered = [...auditLogs];
+// Mirror learner progress to Supabase so the Admin backend sees real activity.
+app.post('/api/learner/sync', async (req: Request, res: Response) => {
+  const {
+    id,
+    name,
+    email,
+    role,
+    targetDialect,
+    xp,
+    streakDays,
+    hearts,
+    todayMinutes,
+    dailyGoalMinutes,
+    speechScoreAverage,
+    vocabularyMastered,
+    status,
+    lastActive,
+  } = req.body || {};
 
-  if (category && category !== 'ALL') {
-    filtered = filtered.filter(l => l.category === category);
-  }
-  if (severity && severity !== 'ALL') {
-    filtered = filtered.filter(l => l.severity === severity);
-  }
-  if (search && typeof search === 'string') {
-    const s = search.toLowerCase();
-    filtered = filtered.filter(l => 
-      l.description.toLowerCase().includes(s) || 
-      l.actor.toLowerCase().includes(s) || 
-      l.eventType.toLowerCase().includes(s)
-    );
-  }
-
-  const parsedLimit = parseInt(limit as string, 10) || 100;
-  res.json({
-    total: filtered.length,
-    logs: filtered.slice(0, parsedLimit),
-    categories: ['ALL', 'AI_INFERENCE', 'SPEECH_WER', 'LEARNING_ACTIVITY', 'SECURITY_RLS', 'SYSTEM_CONFIG'],
-    severities: ['ALL', 'INFO', 'SUCCESS', 'WARNING', 'CRITICAL']
-  });
-});
-
-// Admin: Create Manual Audit Entry
-app.post('/api/admin/audit-logs', (req: Request, res: Response) => {
-  const { eventType, category, actor = 'admin_user', actorRole = 'System Administrator', description, severity = 'INFO', metadata } = req.body;
-  if (!eventType || !description) {
-    return res.status(400).json({ error: 'eventType and description are required' });
+  if (!id || !name) {
+    return res.status(400).json({ error: 'id and name are required' });
   }
 
-  const entry = logAuditEvent({
-    eventType,
-    category: category || 'SYSTEM_CONFIG',
-    actor,
-    actorRole,
-    description,
-    severity,
-    metadata
+  const synced = await upsertLearnerAccount({
+    id,
+    name,
+    email,
+    role,
+    targetDialect,
+    xp,
+    streakDays,
+    hearts,
+    todayMinutes,
+    dailyGoalMinutes,
+    speechScoreAverage,
+    vocabularyMastered,
+    status,
+    lastActive,
   });
 
-  res.status(201).json(entry);
-});
-
-// Admin: Clear Audit Logs
-app.delete('/api/admin/audit-logs', (_req: Request, res: Response) => {
-  auditLogs = [];
-  logAuditEvent({
-    eventType: 'AUDIT_LOGS_PURGED',
-    category: 'SYSTEM_CONFIG',
-    actor: 'admin_user',
-    actorRole: 'System Administrator',
-    description: 'System audit log history was reset by administrator',
-    severity: 'WARNING'
-  });
-  res.json({ success: true, message: 'Audit logs cleared' });
-});
-
-// Admin: System Statistics
-app.get('/api/admin/system-stats', (_req: Request, res: Response) => {
-  res.json({
-    activeLearnersCount: adminLearners.length,
-    totalPracticeMinutes: adminLearners.reduce((acc, l) => acc + l.todayMinutes, 0) + 7480,
-    totalPracticeHours: 128.4,
-    whisperAvgWer: 11.2,
-    bertIntentAccuracy: 94.7,
-    susUsabilityScore: 88.5,
-    sampleSize: 45,
-    aiRequestsToday: 384,
-    geminiStatus: ai ? 'OPERATIONAL' : 'LOCAL_LINGUISTIC_ENGINE',
-    supabaseRlsStatus: 'ENFORCED_ACTIVE',
-    serverUptimeSeconds: process.uptime(),
-    memoryUsageMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-  });
-});
-
-// Admin: Get & Update System Config
-app.get('/api/admin/system-config', (_req: Request, res: Response) => {
-  res.json(systemConfig);
-});
-
-app.post('/api/admin/system-config', (req: Request, res: Response) => {
-  const updates = req.body;
-  systemConfig = {
-    ...systemConfig,
-    ...updates,
-  };
-
-  logAuditEvent({
-    eventType: 'CONFIG_MODIFIED',
-    category: 'SYSTEM_CONFIG',
-    actor: 'admin_user',
-    actorRole: 'System Administrator',
-    description: `System configuration updated: ${Object.keys(updates).join(', ')}`,
-    severity: 'WARNING',
-    metadata: updates
-  });
-
-  res.json({ success: true, config: systemConfig });
-});
-
-// Admin: Learners Management
-app.get('/api/admin/learners', (_req: Request, res: Response) => {
-  res.json({ learners: adminLearners });
-});
-
-app.post('/api/admin/learners/:id/action', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { action, amount = 100, dialect } = req.body;
-
-  const learnerIndex = adminLearners.findIndex(l => l.id === id);
-  if (learnerIndex === -1) {
-    return res.status(404).json({ error: 'Learner not found' });
-  }
-
-  const learner = adminLearners[learnerIndex];
-
-  if (action === 'refill_hearts') {
-    learner.hearts = 5;
-    logAuditEvent({
-      eventType: 'USER_HEARTS_REFILLED',
-      category: 'LEARNING_ACTIVITY',
-      actor: 'admin_user',
-      actorRole: 'System Administrator',
-      description: `Admin refilled hearts to 5 for ${learner.name} (${learner.email})`,
-      severity: 'INFO',
-      metadata: { userId: id }
-    });
-  } else if (action === 'grant_xp') {
-    learner.xp += amount;
-    logAuditEvent({
-      eventType: 'BONUS_XP_AWARDED',
-      category: 'LEARNING_ACTIVITY',
-      actor: 'admin_user',
-      actorRole: 'System Administrator',
-      description: `Admin awarded +${amount} XP bonus to ${learner.name}`,
-      severity: 'SUCCESS',
-      metadata: { userId: id, amount }
-    });
-  } else if (action === 'change_dialect' && dialect) {
-    learner.targetDialect = dialect;
-    logAuditEvent({
-      eventType: 'DIALECT_PREFERENCE_UPDATED',
-      category: 'SYSTEM_CONFIG',
-      actor: 'admin_user',
-      actorRole: 'System Administrator',
-      description: `Admin changed target dialect for ${learner.name} to ${dialect}`,
-      severity: 'INFO',
-      metadata: { userId: id, dialect }
-    });
-  }
-
-  res.json({ success: true, learner });
+  res.json({ success: synced, supabaseConfigured: isSupabaseServerConfigured });
 });
 
 // SULTI Conversational AI Endpoint (Multi-turn Chat, Search Grounding, Maps Grounding, Multi-Coach Personas)

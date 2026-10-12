@@ -28,7 +28,6 @@ interface TopHeaderProps {
   dialect: TargetDialect;
   onOpenDialectModal: () => void;
   onOpenAuditModal: () => void;
-  onOpenAdminApp?: () => void;
   onRefillHearts?: () => void;
   userName?: string;
   showHeroGreeting?: boolean;
@@ -43,7 +42,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   dialect,
   onOpenDialectModal,
   onOpenAuditModal,
-  onOpenAdminApp,
   userName = 'Genesis',
   showHeroGreeting = true,
   onNavigateAction,
@@ -258,19 +256,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-700 dark:text-teal-400" />
             </button>
 
-            {/* Admin Web Dashboard Action */}
-            {onOpenAdminApp && (
-              <button
-                onClick={() => {
-                  sounds.playTap();
-                  onOpenAdminApp();
-                }}
-                className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0"
-                title="Open Admin Dashboard & Audit Control Center"
-              >
-                <Sliders className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600 dark:text-indigo-400" />
-              </button>
-            )}
+            {/* Admin Web Dashboard Action removed — the admin console is now a
+                separate app running on :5000 (see admin/). */}
           </div>
         </div>
       </header>
@@ -366,8 +353,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         onNavigateAction={(actionType) => {
           if (actionType === 'audit') {
             onOpenAuditModal();
-          } else if (actionType === 'admin') {
-            onOpenAdminApp?.();
           } else if (actionType === 'dialect') {
             onOpenDialectModal();
           } else if (onNavigateAction) {
