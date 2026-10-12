@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Flame, ShieldCheck, Gem, Volume2, Globe, ChevronRight, 
-  Award, Sun, Moon, Sparkles, Sliders, Bell 
+  Award, Sun, Moon, Sparkles, Sliders, Bell, User, LogIn 
 } from 'lucide-react';
 import { TargetDialect, NotificationCategory } from '../types';
 import { sounds } from '../utils/soundEffects';
@@ -28,10 +28,14 @@ interface TopHeaderProps {
   dialect: TargetDialect;
   onOpenDialectModal: () => void;
   onOpenAuditModal: () => void;
+  onOpenAdminConsole?: () => void;
   onRefillHearts?: () => void;
   userName?: string;
+  userAvatar?: string;
   showHeroGreeting?: boolean;
   onNavigateAction?: (actionType?: string) => void;
+  onOpenLogin?: () => void;
+  isLoggedIn?: boolean;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -42,9 +46,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   dialect,
   onOpenDialectModal,
   onOpenAuditModal,
+  onOpenAdminConsole,
   userName = 'Genesis',
+  userAvatar,
   showHeroGreeting = true,
   onNavigateAction,
+  onOpenLogin,
+  isLoggedIn = true,
 }) => {
   const { themeMode, setThemeMode, isDark, toggleTheme } = useTheme();
   const [isPlayingGreeting, setIsPlayingGreeting] = useState(false);
@@ -183,34 +191,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </div>
           </div>
 
-          {/* SINGLE UNIFIED STATUS BAR ROW (Streak, Bahandi Gems/XP, Notifications, Theme, Security) */}
+          {/* SINGLE UNIFIED STATUS BAR ROW (Notifications, Theme) */}
           <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 bg-stone-100 dark:bg-stone-800/90 p-0.5 rounded-full border border-stone-300 dark:border-white/15 shadow-inner backdrop-blur-md">
-            {/* Fire Streak Pill - High Contrast */}
-            <button
-              onClick={() => {
-                sounds.playTap();
-                onOpenAuditModal();
-              }}
-              className="h-6.5 sm:h-7 px-1.5 sm:px-2.5 flex items-center gap-0.5 sm:gap-1 rounded-full bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/80 dark:hover:bg-amber-900/80 text-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-500/40 active:scale-95 transition-all cursor-pointer font-mono text-[10.5px] sm:text-xs font-black shadow-2xs shrink-0"
-              title={`${streak}-day streak! Keep up your daily Bisaya practice.`}
-            >
-              <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-amber-500 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span className="tabular-nums font-black">{streak}</span>
-            </button>
-
-            {/* Diamond / Bahandi Gems Pill - High Contrast */}
-            <button
-              onClick={() => {
-                sounds.playTap();
-                onOpenAuditModal();
-              }}
-              className="h-6.5 sm:h-7 px-1.5 sm:px-2.5 flex items-center gap-0.5 sm:gap-1 rounded-full bg-teal-100 hover:bg-teal-200 dark:bg-teal-950/80 dark:hover:bg-teal-900/80 text-teal-950 dark:text-teal-200 border border-teal-300 dark:border-teal-500/40 active:scale-95 transition-all cursor-pointer font-mono text-[10.5px] sm:text-xs font-black shadow-2xs shrink-0"
-              title={`${gems} Bahandi Gems (XP: ${xp})`}
-            >
-              <Gem className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-teal-600/30 text-teal-700 dark:text-teal-300 shrink-0" />
-              <span className="tabular-nums font-black">{gems}</span>
-            </button>
-
             {/* Notification Center Bell Action with Unread Badge */}
             <button
               onClick={() => {
@@ -244,20 +226,27 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               )}
             </button>
 
-            {/* Security & Capstone Blueprint Action */}
+            {/* User Account / Login Button */}
             <button
               onClick={() => {
                 sounds.playTap();
-                onOpenAuditModal();
+                if (onOpenLogin) {
+                  onOpenLogin();
+                } else if (onNavigateAction) {
+                  onNavigateAction('profile');
+                }
               }}
-              className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-700 hover:bg-stone-100 dark:hover:bg-stone-600 text-teal-700 dark:text-teal-300 border border-stone-300 dark:border-white/15 shadow-2xs flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0"
-              title="SultiAI Research Blueprint & Supabase Security Audit"
+              className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-700 hover:bg-stone-100 dark:hover:bg-stone-600 text-stone-900 dark:text-stone-100 border border-stone-300 dark:border-white/15 shadow-2xs flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0 overflow-hidden"
+              title={isLoggedIn ? `Account: ${userName}. Tap to view profile or switch account.` : 'Sign In to SultiAI'}
             >
-              <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-700 dark:text-teal-400" />
+              {userAvatar ? (
+                <img src={userAvatar} alt={userName} className="w-full h-full object-cover" />
+              ) : isLoggedIn ? (
+                <User className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-600 dark:text-teal-400" />
+              ) : (
+                <LogIn className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-600 dark:text-teal-400" />
+              )}
             </button>
-
-            {/* Admin Web Dashboard Action removed — the admin console is now a
-                separate app running on :5000 (see admin/). */}
           </div>
         </div>
       </header>

@@ -136,6 +136,7 @@ export interface UserProfile {
   vocabularyMastered: number;
   speechScoreAverage: number;
   joinedDate: string;
+  authProvider?: 'google' | 'email';
 }
 
 export type ActivityType = 

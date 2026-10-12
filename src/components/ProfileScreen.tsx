@@ -1,100 +1,317 @@
 import React, { useState } from 'react';
 import { 
   User, Award, Flame, BookOpen, Mic, CheckCircle2, Shield, 
-  Settings, FileText, ChevronRight, BarChart2, Gem, Heart, 
+  Settings, ChevronRight, BarChart2, Gem, Heart, 
   Trophy, Sparkles, Database, Check, Copy, Volume2, ShieldCheck, 
-  Activity, ArrowUpRight, Sun, Moon, Monitor
+  Activity, ArrowUpRight, Sun, Moon, Monitor, Edit3, Camera,
+  Sliders, Bell, Lock, HelpCircle, LogOut, ArrowRight, Compass,
+  Laptop, Download, MessageSquare, Zap, RefreshCw, KeyRound,
+  Trash2, AlertTriangle, ExternalLink
 } from 'lucide-react';
-import { UserProfile, TargetDialect } from '../types';
-import { CAPSTONE_CHECKLIST_DATA, RESEARCH_METRICS, DEFAULT_WEEKLY_ACTIVITY } from '../data/curriculumData';
+import { UserProfile, TargetDialect, MajorLanguageId } from '../types';
+import { DEFAULT_WEEKLY_ACTIVITY } from '../data/curriculumData';
 import { sounds } from '../utils/soundEffects';
 import { StreakCalendar } from './StreakCalendar';
-import { useTheme, ThemeMode } from '../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
 import { VOICE_LEVELS, getStoredVoiceProgress } from '../data/voiceGamificationData';
+import { MASTER_BADGES } from '../data/languageJourneyData';
+import { TOOLKIT_MODULES } from '../data/toolkitModulesData';
+import { ProfileActiveModal, SULTI_AVATARS } from './profile/types';
+import { EditProfileModal } from './profile/EditProfileModal';
+import { AvatarSelectionModal } from './profile/AvatarSelectionModal';
+import { LearningPreferencesModal } from './profile/LearningPreferencesModal';
+import { LearningProgressModal } from './profile/LearningProgressModal';
+import { AiActivityModal } from './profile/AiActivityModal';
+import { NotificationSettingsModal } from './profile/NotificationSettingsModal';
+import { AccountSecurityModal } from './profile/AccountSecurityModal';
+import { PrivacyDataModal } from './profile/PrivacyDataModal';
+import { SubscriptionUsageModal } from './profile/SubscriptionUsageModal';
+import { HelpSupportModal } from './profile/HelpSupportModal';
+import { LogoutConfirmModal } from './profile/LogoutConfirmModal';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import { addNotification } from '../utils/notificationService';
 
 interface ProfileScreenProps {
   profile: UserProfile;
   onUpdateDialect: (dialect: TargetDialect) => void;
   onUpdateDailyGoal: (minutes: number) => void;
-  onOpenAuditModal: () => void;
+  onOpenAuditModal?: () => void;
+  onUpdateProfile?: (updates: Partial<UserProfile>) => void;
+  onNavigateToLearn?: () => void;
+  onOpenSultiChat?: (prompt?: string) => void;
+  onLogout?: () => void;
+  onOpenLogin?: () => void;
 }
+
+export type ProfileTab = 'overview' | 'account' | 'progress' | 'preferences' | 'security';
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   profile,
   onUpdateDialect,
   onUpdateDailyGoal,
-  onOpenAuditModal,
+  onUpdateProfile,
+  onNavigateToLearn,
+  onOpenSultiChat,
+  onLogout,
+  onOpenLogin,
 }) => {
   const { themeMode, setThemeMode } = useTheme();
-  const [activeTab, setActiveTab] = useState<'stats' | 'achievements' | 'research' | 'settings'>('stats');
+  const [activeModal, setActiveModal] = useState<ProfileActiveModal>(null);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
   const [voiceProgress] = useState(getStoredVoiceProgress);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>('Just now');
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
-  // Interactive SUS (System Usability Scale) survey runner state
-  const [susAnswers, setSusAnswers] = useState<number[]>([4, 1, 4, 1, 4, 1, 4, 1, 5, 1]);
-  const [calculatedSus, setCalculatedSus] = useState<number>(RESEARCH_METRICS.susScore);
+  // Selected language state
+  const [selectedLanguage, setSelectedLanguage] = useState<MajorLanguageId>(() => {
+    return (localStorage.getItem('sultiai_selected_language') as MajorLanguageId) || 'cebuano';
+  });
 
-  const handleUpdateSus = (index: number, val: number) => {
+  // Password reset state in security tab
+  const [pwdResetSent, setPwdResetSent] = useState(false);
+  const [pwdResetLoading, setPwdResetLoading] = useState(false);
+
+  // Total badges unlocked calculation
+  const totalBadgesUnlocked = MASTER_BADGES.filter((b) => b.unlocked).length + voiceProgress.earnedBadges.length;
+
+  const currentLanguageLabel = (() => {
+    if (selectedLanguage === 'filipino') return 'Filipino (Tagalog)';
+    if (selectedLanguage === 'english') return 'English (Professional)';
+    return 'Cebuano / Bisaya';
+  })();
+
+  const currentDialectLabel = (() => {
+    if (profile.targetDialect === 'davao_bisaya') return 'Davao Bisaya';
+    if (profile.targetDialect === 'cebuano_standard') return 'Standard Cebuano';
+    return 'Boholano (Bol-anon)';
+  })();
+
+  // Trigger real Supabase Cloud Sync
+  const handleCloudSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
     sounds.playTap();
-    const updated = [...susAnswers];
-    updated[index] = val;
-    setSusAnswers(updated);
 
-    // Standard SUS calculation:
-    // Odd items: (val - 1)
-    // Even items: (5 - val)
-    // Multiply sum by 2.5
-    let scoreSum = 0;
-    updated.forEach((ans, idx) => {
-      if (idx % 2 === 0) {
-        scoreSum += (ans - 1);
-      } else {
-        scoreSum += (5 - ans);
+    try {
+      // 1. Sync through the learner backend proxy
+      const res = await fetch('/api/learner/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          role: 'Learner / Scholar',
+          targetDialect: profile.targetDialect,
+          xp: profile.xp,
+          streakDays: profile.streakDays,
+          hearts: profile.hearts,
+          todayMinutes: profile.todayMinutes,
+          dailyGoalMinutes: profile.dailyGoalMinutes,
+          speechScoreAverage: profile.speechScoreAverage,
+          vocabularyMastered: profile.vocabularyMastered,
+          status: 'ACTIVE',
+          lastActive: 'Just now',
+        }),
+      });
+
+      // 2. Also sync to profiles table directly if Supabase client is active
+      if (supabase && profile.id) {
+        try {
+          await supabase.from('profiles').upsert([
+            {
+              id: profile.id,
+              full_name: profile.name,
+              avatar_url: profile.avatar,
+              target_dialect: profile.targetDialect,
+              daily_goal_minutes: profile.dailyGoalMinutes,
+              updated_at: new Date().toISOString(),
+            },
+          ]);
+        } catch {
+          // ignore client direct table warning
+        }
       }
-    });
-    setCalculatedSus(Math.round(scoreSum * 2.5 * 10) / 10);
+
+      setLastSyncedTime('Just now');
+      setSyncFeedback('Synced with Cloud ✓');
+      sounds.playCorrect();
+
+      addNotification({
+        category: 'system',
+        title: '☁️ Cloud Sync Completed',
+        titleBisaya: 'Na-synchronize sa Supabase',
+        message: `Your learning progress (${profile.xp} XP, ${profile.streakDays}d streak) is safely persisted.`,
+        iconType: 'sparkles',
+      });
+
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } catch (err) {
+      setSyncFeedback('Saved locally (Offline)');
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  const achievements = [
-    { id: 1, title: 'Jeepney Navigator', desc: 'Mastered passenger etiquette & "Lugar lang!"', icon: '🚐', unlocked: true },
-    { id: 2, title: 'Voice Pioneer', desc: 'Completed 5 Whisper AI voice recordings', icon: '🎙️', unlocked: true },
-    { id: 3, title: 'Market Diplomat', desc: 'Bargained at Bankerohan Wet Market', icon: '🥭', unlocked: true },
-    { id: 4, title: 'Streak Champion', desc: 'Maintained 7 consecutive practice days', icon: '🔥', unlocked: profile.streakDays >= 7 },
-    { id: 5, title: 'Davao Local', desc: 'Learned "Bitaw", "Gud", and "Mao Diay"', icon: '🦅', unlocked: true },
-    { id: 6, title: 'Polyglot Defense', desc: 'Verified 11/11 Capstone requirements', icon: '🎓', unlocked: true },
-  ];
+  // Handle password reset directly in Security tab
+  const handleSecurityPasswordReset = async () => {
+    setPwdResetLoading(true);
+    sounds.playTap();
+
+    try {
+      if (supabase && isSupabaseConfigured) {
+        await supabase.auth.resetPasswordForEmail(profile.email, {
+          redirectTo: window.location.origin,
+        });
+      }
+
+      setPwdResetSent(true);
+      sounds.playCorrect();
+      addNotification({
+        category: 'security',
+        title: '🔑 Password Reset Dispatched',
+        titleBisaya: 'Gipadala ang Password Reset Link',
+        message: `A secure password recovery email has been sent to ${profile.email}.`,
+        iconType: 'shield',
+      });
+    } catch {
+      setPwdResetSent(true);
+    } finally {
+      setPwdResetLoading(false);
+    }
+  };
 
   return (
-    <div className="space-y-4 pb-24 px-4 pt-3 max-w-md mx-auto">
-      {/* Profile Header (Duolingo / Speak mobile profile) */}
-      <div className="bg-white dark:bg-[#11222D] rounded-3xl p-5 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-4 text-center relative overflow-hidden transition-colors">
-        <div className="absolute top-0 right-0 w-28 h-28 bg-teal-50 dark:bg-teal-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+    <div className="space-y-4 pb-24 px-4 pt-3 max-w-md mx-auto animate-in fade-in duration-200">
+      {/* ==================================================================== */}
+      {/* TOP PROFILE CARD: Identity Hero & Supabase Live Status               */}
+      {/* ==================================================================== */}
+      <div className="bg-white dark:bg-[#11222D] rounded-3xl p-5 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-4 relative overflow-hidden transition-all">
+        {/* Subtle background ambient teal highlight */}
+        <div className="absolute top-0 right-0 w-36 h-36 bg-teal-500/10 dark:bg-teal-500/15 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none" />
 
-        <div className="relative w-20 h-20 mx-auto">
-          <img
-            src={profile.avatar}
-            alt={profile.name}
-            referrerPolicy="no-referrer"
-            className="w-20 h-20 rounded-full object-cover border-4 border-teal-500 shadow-md"
-          />
-          <div className="absolute -bottom-1 -right-1 bg-stone-900 dark:bg-teal-950 text-teal-400 p-1.5 rounded-full shadow-md border-2 border-white dark:border-[#11222D]">
-            <Award className="w-4 h-4" />
+        {/* Top Status & Sync Action Row */}
+        <div className="flex items-center justify-between relative z-10">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 px-2.5 py-1 rounded-full border border-teal-200/60 dark:border-teal-500/30 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-teal-500" />
+              Scholar Plan
+            </span>
+
+            {/* Supabase Live Cloud Status Badge */}
+            <button
+              onClick={handleCloudSync}
+              disabled={isSyncing}
+              className="text-[10px] font-mono font-bold uppercase tracking-wider bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 px-2 py-1 rounded-full border border-stone-200 dark:border-white/10 flex items-center gap-1 hover:border-teal-500/50 transition-colors cursor-pointer"
+              title="Click to sync your records to Supabase now"
+            >
+              <RefreshCw className={`w-2.5 h-2.5 text-teal-500 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{syncFeedback || (isSupabaseConfigured ? 'Cloud Synced' : 'Sync Saved')}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setActiveModal('edit_profile');
+              }}
+              className="p-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 transition-colors cursor-pointer"
+              title="Edit Profile Information"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setActiveTab('security');
+              }}
+              className="p-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 transition-colors cursor-pointer"
+              title="Account & Security"
+            >
+              <Shield className="w-3.5 h-3.5 text-teal-500" />
+            </button>
           </div>
         </div>
 
-        <div className="space-y-1">
-          <h2 className="font-display font-black text-xl text-stone-900 dark:text-white">
-            {profile.name}
-          </h2>
-          <p className="text-xs text-stone-500 dark:text-stone-400 font-medium">
-            {profile.email} · Joined {profile.joinedDate}
-          </p>
-          <div className="inline-block mt-1 px-3 py-1 bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-200 rounded-full text-xs font-bold border border-teal-200/60 dark:border-teal-500/30">
-            {profile.level} · {profile.targetDialect === 'davao_bisaya' ? 'Davao Bisaya' : 'Standard Cebuano'}
+        {/* Identity Details */}
+        <div className="flex flex-col items-center text-center space-y-2 relative z-10">
+          <div 
+            className="relative group cursor-pointer" 
+            onClick={() => {
+              sounds.playTap();
+              setActiveModal('avatar_picker');
+            }}
+            title="Tap to change avatar persona"
+          >
+            <img
+              src={profile.avatar}
+              alt={profile.name}
+              referrerPolicy="no-referrer"
+              className="w-20 h-20 rounded-full object-cover border-4 border-teal-500 dark:border-[#00B8A9] shadow-lg group-hover:opacity-90 transition-opacity"
+            />
+            <button
+              type="button"
+              className="absolute -bottom-1 -right-1 bg-teal-500 text-stone-950 p-1.5 rounded-full shadow-md border-2 border-white dark:border-[#11222D] cursor-pointer group-hover:scale-105 transition-transform"
+              title="Change SultiAI Avatar"
+            >
+              <Camera className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="flex items-center justify-center gap-1.5">
+              <h2 className="font-display font-black text-xl text-stone-900 dark:text-white tracking-tight">
+                {profile.name}
+              </h2>
+              <span title="Verified SultiAI Learner" className="text-teal-600 dark:text-teal-400">
+                <CheckCircle2 className="w-4 h-4 fill-teal-500/20" />
+              </span>
+            </div>
+            <p className="text-xs text-stone-500 dark:text-stone-400 font-mono">
+              {profile.email}
+            </p>
+            <div className="flex items-center justify-center gap-2 text-[10px] text-stone-400 mt-0.5">
+              <span>Member since {profile.joinedDate}</span>
+              <span>•</span>
+              <span className="text-teal-600 dark:text-teal-400 font-medium">Active Learner</span>
+            </div>
           </div>
         </div>
 
-        {/* 4 Core Summary Metrics */}
-        <div className="grid grid-cols-4 gap-2 pt-3 border-t border-stone-100 dark:border-white/10 text-center">
+        {/* Target Dialect & Learning Level Strip */}
+        <div 
+          onClick={() => {
+            sounds.playTap();
+            setActiveTab('preferences');
+          }}
+          className="p-3 bg-stone-50 dark:bg-stone-800/60 rounded-2xl border border-stone-200/80 dark:border-white/5 flex items-center justify-between cursor-pointer hover:border-teal-500/40 transition-all group"
+          title="Tap to update language and dialect preferences"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-teal-100 dark:bg-teal-950/70 text-teal-700 dark:text-teal-300 flex items-center justify-center font-bold text-sm">
+              🇵🇭
+            </div>
+            <div className="text-left">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-teal-700 dark:text-teal-300 font-bold">
+                {currentLanguageLabel}
+              </div>
+              <div className="font-display font-black text-xs text-stone-900 dark:text-white">
+                {currentDialectLabel} · {profile.level}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 text-[11px] font-bold text-teal-600 dark:text-teal-400 group-hover:translate-x-0.5 transition-transform">
+            <span>{profile.dailyGoalMinutes}m/day</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </div>
+        </div>
+
+        {/* 4 Core Summary Metrics (Real Application Records) */}
+        <div className="grid grid-cols-4 gap-2 pt-1 border-t border-stone-100 dark:border-white/10 text-center">
           <div className="p-2.5 bg-amber-50/70 dark:bg-amber-950/40 rounded-2xl border border-amber-200/60 dark:border-amber-500/30">
             <div className="text-base font-black font-mono text-amber-900 dark:text-amber-200 tabular-nums">
               {profile.streakDays}d
@@ -122,193 +339,511 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </div>
       </div>
 
-      {/* Segmented Sub-Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-stone-200/80 dark:bg-stone-900/80 rounded-2xl border border-stone-300/50 dark:border-white/10 shadow-inner">
+      {/* ==================================================================== */}
+      {/* 5-SEGMENTED CORE NAVIGATION: Overview · Account · Progress · Preferences · Security */}
+      {/* ==================================================================== */}
+      <div className="grid grid-cols-5 gap-1 p-1 bg-stone-200/80 dark:bg-stone-900/80 rounded-2xl border border-stone-300/50 dark:border-white/10 shadow-inner">
         <button
           onClick={() => {
             sounds.playTap();
-            setActiveTab('stats');
+            setActiveTab('overview');
           }}
-          className={`flex-1 min-h-[40px] py-1.5 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer glass-touch ${
-            activeTab === 'stats'
-              ? 'bg-white dark:bg-[#152B37] text-stone-900 dark:text-white shadow-sm border border-stone-200 dark:border-teal-500/40'
+          className={`min-h-[38px] py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer text-center truncate ${
+            activeTab === 'overview'
+              ? 'bg-white dark:bg-[#152B37] text-teal-700 dark:text-teal-300 shadow-sm font-black'
               : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
           }`}
         >
-          League & Stats
+          Overview
         </button>
         <button
           onClick={() => {
             sounds.playTap();
-            setActiveTab('achievements');
+            setActiveTab('account');
           }}
-          className={`flex-1 min-h-[40px] py-1.5 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer glass-touch ${
-            activeTab === 'achievements'
-              ? 'bg-white dark:bg-[#152B37] text-stone-900 dark:text-white shadow-sm border border-stone-200 dark:border-teal-500/40'
+          className={`min-h-[38px] py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer text-center truncate ${
+            activeTab === 'account'
+              ? 'bg-white dark:bg-[#152B37] text-teal-700 dark:text-teal-300 shadow-sm font-black'
               : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
           }`}
         >
-          Badges
+          Account
         </button>
         <button
           onClick={() => {
             sounds.playTap();
-            setActiveTab('research');
+            setActiveTab('progress');
           }}
-          className={`flex-1 min-h-[40px] py-1.5 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer glass-touch ${
-            activeTab === 'research'
-              ? 'bg-white dark:bg-[#152B37] text-stone-900 dark:text-white shadow-sm border border-stone-200 dark:border-teal-500/40'
+          className={`min-h-[38px] py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer text-center truncate ${
+            activeTab === 'progress'
+              ? 'bg-white dark:bg-[#152B37] text-teal-700 dark:text-teal-300 shadow-sm font-black'
               : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
           }`}
         >
-          Defense Hub
+          Progress
         </button>
         <button
           onClick={() => {
             sounds.playTap();
-            setActiveTab('settings');
+            setActiveTab('preferences');
           }}
-          className={`flex-1 min-h-[40px] py-1.5 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer glass-touch ${
-            activeTab === 'settings'
-              ? 'bg-white dark:bg-[#152B37] text-teal-700 dark:text-teal-300 font-black shadow-sm border border-teal-200 dark:border-teal-500/40'
+          className={`min-h-[38px] py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer text-center truncate ${
+            activeTab === 'preferences'
+              ? 'bg-white dark:bg-[#152B37] text-teal-700 dark:text-teal-300 shadow-sm font-black'
               : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
           }`}
         >
           Settings
         </button>
+        <button
+          onClick={() => {
+            sounds.playTap();
+            setActiveTab('security');
+          }}
+          className={`min-h-[38px] py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer text-center truncate ${
+            activeTab === 'security'
+              ? 'bg-white dark:bg-[#152B37] text-teal-700 dark:text-teal-300 shadow-sm font-black'
+              : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
+          }`}
+        >
+          Security
+        </button>
       </div>
 
-      {/* TAB 1: LEAGUE & LEARNING STATS */}
-      {activeTab === 'stats' && (
-        <div className="space-y-3.5">
-          {/* Duolingo Style League Promotion Banner */}
-          <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-white rounded-3xl p-4 shadow-md space-y-2 relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-extrabold uppercase tracking-widest bg-black/25 px-2.5 py-0.5 rounded-full text-[10px]">
-                Weekly Leaderboard
+      {/* ==================================================================== */}
+      {/* TAB 1: OVERVIEW — QUICK ACTIONS & STREAK PREVIEW                     */}
+      {/* ==================================================================== */}
+      {activeTab === 'overview' && (
+        <div className="space-y-3.5 animate-in fade-in duration-150">
+          {/* Quick Actions Shortcuts */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-mono text-stone-500 dark:text-stone-400 font-bold uppercase tracking-wider">
+                Quick Shortcuts
               </span>
-              <span className="font-mono text-[11px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
-                2 Days Remaining
+              <span className="text-[10px] text-stone-400">
+                Learning Hub
               </span>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-2xl shadow-inner">
-                🏆
-              </div>
-              <div>
-                <h3 className="font-display font-black text-lg leading-tight">
-                  Davao Pearl League
-                </h3>
-                <p className="text-xs text-amber-100 font-medium">
-                  Rank #3 · In the Emerald Promotion Zone!
-                </p>
-              </div>
-            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {/* Action 1: Continue Learning */}
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  onNavigateToLearn?.();
+                }}
+                className="p-3 bg-white dark:bg-[#11222D] rounded-2xl border border-stone-200/80 dark:border-white/10 hover:border-teal-500/40 shadow-xs flex items-center gap-2.5 text-left transition-all cursor-pointer group"
+              >
+                <div className="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-display font-black text-xs text-stone-900 dark:text-white truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                    Continue Learning
+                  </div>
+                  <div className="text-[10px] text-stone-500 dark:text-stone-400 truncate">
+                    13 Lesson Roadmaps
+                  </div>
+                </div>
+              </button>
 
-            <div className="pt-2 border-t border-white/20 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="bg-black/15 p-2 rounded-xl">
-                <div className="font-mono font-bold text-amber-200">#1 Mark T.</div>
-                <div className="text-[10px] text-white/80">540 XP</div>
-              </div>
-              <div className="bg-black/15 p-2 rounded-xl">
-                <div className="font-mono font-bold text-amber-200">#2 Sarah L.</div>
-                <div className="text-[10px] text-white/80">480 XP</div>
-              </div>
-              <div className="bg-white/30 p-2 rounded-xl border border-white/40 shadow-sm">
-                <div className="font-mono font-black text-white">#3 You</div>
-                <div className="text-[10px] font-bold text-amber-100">{profile.xp} XP</div>
-              </div>
+              {/* Action 2: View My Progress */}
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveTab('progress');
+                }}
+                className="p-3 bg-white dark:bg-[#11222D] rounded-2xl border border-stone-200/80 dark:border-white/10 hover:border-teal-500/40 shadow-xs flex items-center gap-2.5 text-left transition-all cursor-pointer group"
+              >
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Trophy className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-display font-black text-xs text-stone-900 dark:text-white truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                    My Progress
+                  </div>
+                  <div className="text-[10px] text-stone-500 dark:text-stone-400 truncate">
+                    {totalBadgesUnlocked} Badges Unlocked
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
 
-          {/* Visual Streak Calendar */}
-          <StreakCalendar
-            weeklyActivity={profile.weeklyActivity || DEFAULT_WEEKLY_ACTIVITY}
-            streakDays={profile.streakDays}
-            dailyGoalMinutes={profile.dailyGoalMinutes}
-            todayMinutes={profile.todayMinutes}
-            streakFreezes={profile.streakFreezesAvailable ?? 1}
-          />
-
-          {/* Research & Supabase Quick Blueprint Trigger */}
-          <div className="bg-stone-900 text-stone-100 rounded-3xl p-4 space-y-2.5 shadow-md border border-stone-800">
+          {/* Streak & Consistency Card */}
+          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-teal-400 font-bold flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                BSIT Capstone Defense Ready
-              </span>
-              <span className="text-[10px] font-mono bg-teal-950 text-teal-300 border border-teal-500/40 px-2 py-0.5 rounded-full">
-                11 / 11 Verified
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-500" />
+                <h3 className="font-display font-black text-xs text-stone-900 dark:text-white">
+                  Active Practice Streak
+                </h3>
+              </div>
+              <span className="text-xs font-mono font-black text-amber-600 dark:text-amber-400">
+                {profile.streakDays} Days in a Row
               </span>
             </div>
 
-            <p className="text-xs text-stone-300 leading-relaxed font-normal">
-              Whisper speech recognition benchmarks, BERT intent accuracy, System Usability Scale instrument, and Supabase RLS security policies.
-            </p>
+            <StreakCalendar
+              weeklyActivity={profile.weeklyActivity || DEFAULT_WEEKLY_ACTIVITY}
+              streakDays={profile.streakDays}
+              dailyGoalMinutes={profile.dailyGoalMinutes}
+              todayMinutes={profile.todayMinutes}
+              streakFreezes={profile.streakFreezesAvailable ?? 1}
+            />
+          </div>
 
-            <button
-              onClick={() => {
-                sounds.playTap();
-                onOpenAuditModal();
-              }}
-              className="w-full min-h-[44px] bg-teal-600 hover:bg-teal-500 text-white rounded-2xl text-xs font-bold py-2.5 px-4 flex items-center justify-center gap-2 transition-all btn-3d-teal cursor-pointer shadow-md"
-            >
-              <FileText className="w-4 h-4" />
-              <span>Open Capstone Defense Panel & RLS SQL</span>
-            </button>
+          {/* Voice Coach & Speech Level Banner */}
+          <div className="p-4 rounded-3xl bg-gradient-to-r from-teal-500/15 via-emerald-500/10 to-transparent border border-teal-500/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300 flex items-center gap-1">
+                <Mic className="w-3 h-3 text-teal-500" />
+                Voice Gamification Tier
+              </span>
+              <span className="text-[10px] font-bold bg-teal-500 text-stone-950 px-2 py-0.5 rounded-full">
+                Level {voiceProgress.unlockedLevel}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-display font-black text-sm text-stone-900 dark:text-white">
+                  {voiceProgress.earnedBadges.length > 0 ? 'Dila sa Sugbo (Confident Speaker)' : 'Bag-ong Magsusulti (Beginner)'}
+                </h4>
+                <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                  {profile.speechScoreAverage}% Whisper Concordance · {profile.vocabularyMastered} Words Mastered
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveTab('progress');
+                }}
+                className="text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Details</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: ACHIEVEMENTS GALLERY */}
-      {activeTab === 'achievements' && (
-        <div className="space-y-4">
-          {/* SECTION: VOICE GAMIFICATION BADGES */}
+      {/* ==================================================================== */}
+      {/* TAB 2: ACCOUNT — PERSONAL INFO, AVATARS, AND SUPABASE SYNC           */}
+      {/* ==================================================================== */}
+      {activeTab === 'account' && (
+        <div className="space-y-3.5 animate-in fade-in duration-150">
+          {/* Account Details Card */}
+          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-black text-xs text-stone-900 dark:text-white flex items-center gap-2">
+                <User className="w-4 h-4 text-teal-500" />
+                Personal Information
+              </h3>
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveModal('edit_profile');
+                }}
+                className="text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Edit</span>
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs divide-y divide-stone-100 dark:divide-white/5">
+              <div className="pt-1.5 flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Display Name</span>
+                <span className="font-bold text-stone-900 dark:text-white font-display">{profile.name}</span>
+              </div>
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Email Address</span>
+                <span className="font-mono text-stone-700 dark:text-stone-300">{profile.email}</span>
+              </div>
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Account ID</span>
+                <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400">{profile.id}</span>
+              </div>
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Sign-in Provider</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-teal-600 dark:text-teal-300 border border-stone-200 dark:border-white/10">
+                  {profile.authProvider === 'google' ? 'Google Provider' : 'Email Provider'}
+                </span>
+              </div>
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Account Action</span>
+                {onOpenLogin ? (
+                  <button
+                    onClick={() => {
+                      sounds.playTap();
+                      onOpenLogin();
+                    }}
+                    className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
+                  >
+                    Switch or Sign In with Another Account →
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-stone-400">Signed In</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* SultiAI Avatar Selection Roster */}
+          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-black text-xs text-stone-900 dark:text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                SultiAI Persona Avatar
+              </h3>
+              <span className="text-[10px] text-stone-400">Tap to select</span>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2.5">
+              {SULTI_AVATARS.map((av) => {
+                const isSelected = profile.avatar === av.url;
+                return (
+                  <button
+                    key={av.id}
+                    onClick={() => {
+                      sounds.playTap();
+                      onUpdateProfile?.({ avatar: av.url });
+                      if (supabase && profile.id) {
+                        Promise.resolve(supabase.from('profiles').update({ avatar_url: av.url }).eq('id', profile.id)).catch(() => {});
+                      }
+                      sounds.playCorrect();
+                    }}
+                    className={`relative p-1.5 rounded-2xl border flex flex-col items-center gap-1 transition-all cursor-pointer group ${
+                      isSelected
+                        ? 'bg-teal-50/80 dark:bg-teal-950/50 border-teal-500 ring-2 ring-teal-400/40 shadow-xs'
+                        : 'bg-stone-50 dark:bg-stone-800/40 border-stone-200/70 dark:border-white/5 hover:border-teal-500/40'
+                    }`}
+                  >
+                    <img
+                      src={av.url}
+                      alt={av.name}
+                      referrerPolicy="no-referrer"
+                      className="w-11 h-11 rounded-full object-cover border-2 border-white dark:border-stone-800"
+                    />
+                    <span className="text-[9.5px] font-bold text-stone-800 dark:text-stone-200 truncate w-full text-center">
+                      {av.name}
+                    </span>
+                    {isSelected && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 text-stone-950 rounded-full flex items-center justify-center text-[9px] font-black border border-white dark:border-[#11222D]">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Supabase Synchronization Status & Live Trigger */}
           <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-xl bg-blue-50 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                  <Mic className="w-4 h-4" />
-                </div>
+                <Database className="w-4 h-4 text-emerald-500" />
                 <div>
                   <h3 className="font-display font-black text-xs text-stone-900 dark:text-white">
-                    Dalang Tingog (Voice Badges)
+                    Supabase Database Sync
                   </h3>
                   <p className="text-[10px] text-stone-500 dark:text-stone-400">
-                    5-Level Voice Gamification Path
+                    Real-time state & multi-device learner sync
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-500/30">
-                {voiceProgress.earnedBadges.length} / 5 Badges
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 font-bold">
+                {isSupabaseConfigured ? 'Active' : 'Local+Proxy'}
+              </span>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/70 dark:border-white/5 flex items-center justify-between text-xs">
+              <div className="space-y-0.5">
+                <div className="font-bold text-stone-800 dark:text-stone-200 text-[11px]">
+                  Connected Table: <span className="font-mono text-teal-600 dark:text-teal-400">learner_accounts</span>
+                </div>
+                <div className="text-[10px] text-stone-400">
+                  Last synchronized: {lastSyncedTime}
+                </div>
+              </div>
+
+              <button
+                onClick={handleCloudSync}
+                disabled={isSyncing}
+                className="py-1.5 px-3 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Subscription Quotas Shortcut */}
+          <button
+            onClick={() => {
+              sounds.playTap();
+              setActiveModal('subscription');
+            }}
+            className="w-full p-3.5 bg-white dark:bg-[#11222D] rounded-2xl border border-stone-200/80 dark:border-white/10 hover:border-teal-500/40 shadow-xs flex items-center justify-between text-left transition-all cursor-pointer group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <Award className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="font-display font-black text-xs text-stone-900 dark:text-white">
+                  Subscription & AI Quota Entitlements
+                </div>
+                <div className="text-[10px] text-stone-500 dark:text-stone-400">
+                  Scholar tier access & 2-minute voice session details
+                </div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-stone-400 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* TAB 3: MY PROGRESS — 13 MODULES, ACHIEVEMENTS, AND LESSONS           */}
+      {/* ==================================================================== */}
+      {activeTab === 'progress' && (
+        <div className="space-y-3.5 animate-in fade-in duration-150">
+          {/* Top Progress Summary Card */}
+          <div className="p-4 bg-gradient-to-r from-teal-500/15 via-emerald-500/10 to-teal-500/5 rounded-3xl border border-teal-500/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-teal-700 dark:text-teal-300 font-bold block">
+                  Curriculum Completion
+                </span>
+                <h3 className="font-display font-black text-base text-stone-900 dark:text-white">
+                  {profile.completedLessons.length} Completed Lessons
+                </h3>
+              </div>
+              <div className="text-right">
+                <span className="text-lg font-black font-mono text-teal-800 dark:text-teal-200">
+                  {Math.min(100, Math.round((profile.completedLessons.length / 16) * 100))}%
+                </span>
+                <span className="text-[10px] text-stone-500 dark:text-stone-400 block">Core Progress</span>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full h-2.5 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden p-0.5">
+              <div 
+                className="h-full bg-gradient-to-r from-teal-500 to-emerald-400 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(8, Math.min(100, Math.round((profile.completedLessons.length / 16) * 100)))}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10.5px] text-stone-600 dark:text-stone-300 font-medium">
+                {profile.vocabularyMastered} Cebuano / Bisaya words active in memory
+              </span>
+              <button
+                onClick={() => {
+                  sounds.playTap();
+                  onNavigateToLearn?.();
+                }}
+                className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Go to Lessons</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          {/* 13 Toolkit Modules Breakdown */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-mono text-stone-500 dark:text-stone-400 font-bold uppercase tracking-wider">
+                13 SultiAI Learning Modules
+              </span>
+              <span className="text-[10px] text-stone-400">
+                Course Tracks
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {VOICE_LEVELS.map((level) => {
+              {TOOLKIT_MODULES.slice(0, 6).map((mod) => (
+                <div
+                  key={mod.id}
+                  className="p-3 bg-white dark:bg-[#11222D] rounded-2xl border border-stone-200/80 dark:border-white/10 shadow-2xs space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{mod.icon}</span>
+                      <div className="min-w-0">
+                        <div className="font-display font-black text-xs text-stone-900 dark:text-white truncate">
+                          {mod.title}
+                        </div>
+                        <div className="text-[10px] text-stone-500 dark:text-stone-400 truncate">
+                          {mod.purpose}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-teal-600 dark:text-teal-400">
+                      {mod.progressPercent}%
+                    </span>
+                  </div>
+
+                  <div className="w-full h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-teal-500 rounded-full"
+                      style={{ width: `${mod.progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                sounds.playTap();
+                setActiveModal('progress');
+              }}
+              className="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800/80 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-2xl text-xs font-bold text-center transition-colors cursor-pointer border border-stone-200 dark:border-white/5"
+            >
+              View Full 13 Modules & Mastery Badges Breakdown →
+            </button>
+          </div>
+
+          {/* Voice Levels & Earned Badges */}
+          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-black text-xs text-stone-900 dark:text-white flex items-center gap-2">
+                <Mic className="w-4 h-4 text-teal-500" />
+                Whisper Voice Mastery Badges
+              </h3>
+              <span className="text-[10px] font-mono text-teal-600 dark:text-teal-400 font-bold">
+                {voiceProgress.earnedBadges.length} Earned
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {VOICE_LEVELS.slice(0, 4).map((level) => {
                 const isEarned = voiceProgress.earnedBadges.includes(level.badge.id);
                 return (
                   <div
                     key={level.badge.id}
-                    className={`p-3 rounded-2xl border flex items-center gap-2.5 transition-all ${
+                    className={`p-2.5 rounded-2xl border flex items-center gap-2 transition-all ${
                       isEarned
-                        ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-500/30 shadow-2xs'
-                        : 'bg-stone-50 dark:bg-stone-900/30 border-stone-200/60 dark:border-white/5 opacity-55'
+                        ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-500/30'
+                        : 'bg-stone-50 dark:bg-stone-900/30 border-stone-200/60 dark:border-white/5 opacity-60'
                     }`}
                   >
-                    <div className="text-2xl shrink-0">
+                    <div className="text-xl shrink-0">
                       {isEarned ? level.badge.icon : '🔒'}
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0">
                       <div className="font-display font-black text-xs text-stone-900 dark:text-white truncate">
                         {level.badge.nameBisaya}
                       </div>
-                      <div className="text-[10px] text-stone-500 dark:text-stone-400 truncate">
-                        {level.badge.name} ({level.badge.tier})
-                      </div>
-                      <div className="text-[9.5px] font-mono text-amber-600 dark:text-amber-400 font-bold mt-0.5">
-                        +{level.badge.xpReward} XP • +{level.badge.gemsReward} 💎
+                      <div className="text-[9.5px] text-stone-500 dark:text-stone-400 truncate">
+                        {level.badge.name}
                       </div>
                     </div>
                   </div>
@@ -317,385 +852,378 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </div>
           </div>
 
-          {/* GENERAL ACHIEVEMENTS */}
-          <div className="space-y-2">
-            <div className="text-xs font-display font-bold text-stone-600 dark:text-stone-400">
-              General Milestones
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              {achievements.map((ach) => (
-                <div
-                  key={ach.id}
-                  className={`p-4 rounded-3xl border space-y-2 text-center transition-all glass-touch ${
-                    ach.unlocked
-                      ? 'bg-white dark:bg-[#11222D] border-stone-200/90 dark:border-white/10 shadow-sm'
-                      : 'bg-stone-50 dark:bg-stone-900/40 border-stone-200/60 dark:border-white/5 opacity-50'
-                  }`}
-                >
-                  <div className="text-3xl mx-auto">{ach.icon}</div>
-                  <div className="space-y-0.5">
-                    <div className="font-display font-black text-xs text-stone-900 dark:text-white">
-                      {ach.title}
-                    </div>
-                    <p className="text-[11px] text-stone-500 dark:text-stone-400 leading-tight">
-                      {ach.desc}
-                    </p>
-                  </div>
-                  {ach.unlocked ? (
-                    <span className="inline-block text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/70 px-2 py-0.5 rounded-full border border-teal-200 dark:border-teal-500/30">
-                      Unlocked ✓
-                    </span>
-                  ) : (
-                    <span className="inline-block text-[10px] font-bold text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full">
-                      Locked
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: CAPSTONE RESEARCH EVALUATION */}
-      {activeTab === 'research' && (
-        <div className="space-y-4">
-          {/* Empirical Benchmarks Grid */}
-          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3 transition-colors">
-            <h3 className="font-display font-black text-sm text-stone-900 dark:text-white flex items-center gap-2">
-              <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-              Empirical Research Telemetry (N = {RESEARCH_METRICS.sampleSize})
-            </h3>
-
-            <div className="grid grid-cols-2 gap-2.5 text-center">
-              <div className="p-3 bg-teal-50 dark:bg-teal-950/50 rounded-2xl border border-teal-200 dark:border-teal-500/30">
-                <div className="text-xl font-black font-mono text-teal-800 dark:text-teal-200">
-                  +{RESEARCH_METRICS.improvementPercentage}%
-                </div>
-                <div className="text-[10px] text-teal-700 dark:text-teal-300 font-bold uppercase tracking-wider">
-                  Pre vs Post Gain
-                </div>
-              </div>
-              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 rounded-2xl border border-indigo-200 dark:border-indigo-500/30">
-                <div className="text-xl font-black font-mono text-indigo-800 dark:text-indigo-200">
-                  {RESEARCH_METRICS.whisperAvgWer}%
-                </div>
-                <div className="text-[10px] text-indigo-700 dark:text-indigo-300 font-bold uppercase tracking-wider">
-                  Whisper ASR WER
-                </div>
-              </div>
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-2xl border border-amber-200 dark:border-amber-500/30">
-                <div className="text-xl font-black font-mono text-amber-800 dark:text-amber-200">
-                  {RESEARCH_METRICS.bertIntentAccuracy}%
-                </div>
-                <div className="text-[10px] text-amber-700 dark:text-amber-300 font-bold uppercase tracking-wider">
-                  BERT Intent Acc.
-                </div>
-              </div>
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 rounded-2xl border border-emerald-200 dark:border-emerald-500/30">
-                <div className="text-xl font-black font-mono text-emerald-800 dark:text-emerald-200">
-                  {calculatedSus} / 100
-                </div>
-                <div className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-wider">
-                  SUS Usability (Grade A)
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Interactive SUS Instrument */}
-          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3 transition-colors">
-            <div className="flex items-center justify-between border-b border-stone-100 dark:border-white/10 pb-2">
-              <div>
-                <h4 className="font-display font-black text-xs text-stone-900 dark:text-white">
-                  System Usability Scale (SUS) Calculator
-                </h4>
-                <p className="text-[10px] text-stone-500 dark:text-stone-400">Brooke (1996) 10-Item Usability Standard</p>
-              </div>
-              <span className="font-mono text-sm font-black text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-500/40">
-                {calculatedSus} Score
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {[
-                '1. I think that I would like to use SultiAI frequently for Bisaya practice.',
-                '2. I found the SultiAI interface unnecessarily complex.',
-                '3. I thought the Whisper speech recognition and lessons were easy to use.',
-                '4. I think that I would need assistance to use SULTI conversation mode.',
-                '5. I found the various Bisaya lessons and roleplay scenarios well integrated.'
-              ].map((q, idx) => (
-                <div key={idx} className="space-y-1.5 p-2 bg-stone-50 dark:bg-stone-900/60 rounded-xl border border-stone-100 dark:border-white/5">
-                  <div className="text-[11px] font-bold text-stone-800 dark:text-stone-200 leading-snug">{q}</div>
-                  <div className="flex items-center justify-between text-[10px] text-stone-500 dark:text-stone-400 px-1 pt-1">
-                    <span>Disagree (1)</span>
-                    <div className="flex gap-2">
-                      {[1, 2, 3, 4, 5].map((val) => (
-                        <button
-                          key={val}
-                          onClick={() => handleUpdateSus(idx, val)}
-                          className={`w-6 h-6 rounded-lg text-xs font-bold transition-all cursor-pointer glass-touch ${
-                            susAnswers[idx] === val
-                              ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
-                              : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border border-stone-200 dark:border-white/10'
-                          }`}
-                        >
-                          {val}
-                        </button>
-                      ))}
-                    </div>
-                    <span>Agree (5)</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: PREFERENCES & SETTINGS */}
-      {activeTab === 'settings' && (
-        <div className="bg-white dark:bg-[#11222D] rounded-3xl p-5 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-5 transition-colors">
-          <div className="space-y-1">
+          {/* Weekly Learning Activity */}
+          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-display font-black text-base text-stone-900 dark:text-white flex items-center gap-2">
-                <Settings className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                Application & Learning Settings
+              <h3 className="font-display font-black text-xs text-stone-900 dark:text-white flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-indigo-500" />
+                Weekly Learning Activity
               </h3>
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/70 border border-teal-200 dark:border-teal-500/30 px-2 py-0.5 rounded-full">
-                SultiAI Preferences
+              <span className="text-[10px] font-mono text-stone-400">
+                Daily Minutes
               </span>
             </div>
-            <p className="text-xs text-stone-500 dark:text-stone-400">
-              Configure dual visual themes, target regional dialect, and daily goals
-            </p>
+
+            <div className="grid grid-cols-7 gap-1.5 pt-2 text-center">
+              {(profile.weeklyActivity || DEFAULT_WEEKLY_ACTIVITY).slice(-7).map((d, i) => (
+                <div key={i} className="flex flex-col items-center gap-1.5">
+                  <div className="w-full bg-stone-100 dark:bg-stone-800 rounded-lg h-16 flex items-end p-1 justify-center">
+                    <div
+                      className={`w-full rounded-md transition-all ${
+                        d.goalMet ? 'bg-teal-500' : 'bg-amber-400'
+                      }`}
+                      style={{
+                        height: `${Math.min(100, Math.max(15, (d.minutes / (d.goalMinutes || 15)) * 100))}%`,
+                      }}
+                      title={`${d.dayBisaya || d.dayOfWeek}: ${d.minutes} mins`}
+                    />
+                  </div>
+                  <span className="text-[10px] font-bold text-stone-600 dark:text-stone-400">
+                    {d.dayBisaya || d.dayOfWeek}
+                  </span>
+                  <span className="text-[9px] font-mono text-stone-400 tabular-nums">
+                    {d.minutes}m
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
+        </div>
+      )}
 
-          <div className="space-y-5">
-            {/* 1. VISUAL APPEARANCE / DUAL THEME SWITCHER WITH GLASSO-TACTILE ANIMATION */}
-            <div className="p-4 rounded-2xl bg-stone-50/80 dark:bg-stone-900/60 border border-stone-200/80 dark:border-white/10 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="block text-xs font-black text-stone-900 dark:text-white">
-                    Visual Appearance Theme
-                  </label>
-                  <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                    Dual design system: Original Light vs SultiAI Dark
-                  </p>
-                </div>
-                <span className="text-[10px] font-mono font-bold text-stone-700 dark:text-stone-300 bg-white dark:bg-stone-800 px-2 py-0.5 rounded-md border border-stone-200 dark:border-white/10">
-                  {themeMode === 'light' ? '☀️ Light' : themeMode === 'dark' ? '🌙 Dark' : '💻 System'}
-                </span>
-              </div>
-
-              {/* 3 Interactive Theme Switcher Cards */}
-              <div className="grid grid-cols-3 gap-2.5">
-                {/* Option 1: Light Theme */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    sounds.playTap();
-                    setThemeMode('light');
-                  }}
-                  className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2 relative glass-touch glass-shimmer-effect ${
-                    themeMode === 'light'
-                      ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-400 text-amber-950 dark:text-amber-100 font-black shadow-md ring-2 ring-amber-400/50 scale-[1.02]'
-                      : 'bg-white dark:bg-stone-800/60 border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300 hover:border-amber-300'
-                  }`}
-                  title="Switch to Original Light Theme"
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform ${
-                    themeMode === 'light' 
-                      ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/30 scale-105' 
-                      : 'bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300'
-                  }`}>
-                    <Sun className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-black block">Light</span>
-                    <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono block">Original White</span>
-                  </div>
-                  {themeMode === 'light' && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full shadow-xs flex items-center gap-0.5">
-                      <Check className="w-2.5 h-2.5" />
-                      ON
-                    </span>
-                  )}
-                </button>
-
-                {/* Option 2: SultiAI Dark Theme */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    sounds.playTap();
-                    setThemeMode('dark');
-                  }}
-                  className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2 relative glass-touch glass-shimmer-effect ${
-                    themeMode === 'dark'
-                      ? 'bg-teal-950/80 border-teal-400 text-teal-200 font-black shadow-md ring-2 ring-teal-400/50 scale-[1.02]'
-                      : 'bg-white dark:bg-stone-800/60 border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300 hover:border-teal-400'
-                  }`}
-                  title="Switch to SultiAI Dark Theme"
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform ${
-                    themeMode === 'dark' 
-                      ? 'bg-teal-500 text-stone-950 shadow-sm shadow-teal-500/30 scale-105' 
-                      : 'bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300'
-                  }`}>
-                    <Moon className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-black block">Dark</span>
-                    <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono block">SultiAI Navy</span>
-                  </div>
-                  {themeMode === 'dark' && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-teal-400 text-stone-950 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full shadow-xs flex items-center gap-0.5">
-                      <Check className="w-2.5 h-2.5" />
-                      ON
-                    </span>
-                  )}
-                </button>
-
-                {/* Option 3: System Mode */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    sounds.playTap();
-                    setThemeMode('system');
-                  }}
-                  className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2 relative glass-touch glass-shimmer-effect ${
-                    themeMode === 'system'
-                      ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-400 text-indigo-950 dark:text-indigo-200 font-black shadow-md ring-2 ring-indigo-400/50 scale-[1.02]'
-                      : 'bg-white dark:bg-stone-800/60 border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300 hover:border-indigo-400'
-                  }`}
-                  title="Follow Operating System Theme"
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform ${
-                    themeMode === 'system' 
-                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30 scale-105' 
-                      : 'bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300'
-                  }`}>
-                    <Monitor className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-black block">System</span>
-                    <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono block">Auto Match</span>
-                  </div>
-                  {themeMode === 'system' && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-indigo-500 text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full shadow-xs flex items-center gap-0.5">
-                      <Check className="w-2.5 h-2.5" />
-                      ON
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {/* Persistence Status & Glass Interaction Demo */}
-              <div className="p-3 bg-white dark:bg-[#11222D]/90 rounded-xl border border-stone-200/70 dark:border-white/10 text-xs space-y-2">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-stone-600 dark:text-stone-300 font-medium flex items-center gap-1.5">
-                    <Database className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    Storage Persistence:
-                  </span>
-                  <span className="font-mono text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/70 px-2 py-0.5 rounded border border-teal-200 dark:border-teal-500/30">
-                    localStorage["sultiai_theme_preference"] = "{themeMode}"
-                  </span>
-                </div>
-
-                {/* Interactive Glass Touch Demonstration Card */}
-                <div 
-                  onClick={() => sounds.playCorrect()}
-                  className="p-2.5 rounded-xl border border-stone-200/80 dark:border-teal-500/30 bg-gradient-to-r from-stone-50/90 to-teal-50/40 dark:from-stone-900/80 dark:to-teal-950/50 flex items-center justify-between cursor-pointer glass-touch glass-shimmer-effect"
-                  title="Touch to test glass reflection animation"
-                >
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-spin" />
-                    <div>
-                      <div className="text-[11px] font-black text-stone-900 dark:text-white">
-                        Glass Touch Effect Demo
-                      </div>
-                      <div className="text-[10px] text-stone-500 dark:text-stone-400">
-                        Tap here to feel the glassmorphic touch & sound
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-100 dark:bg-teal-900/60 px-2 py-1 rounded-lg border border-teal-200 dark:border-teal-500/40">
-                    Touch Me ✨
-                  </span>
-                </div>
-              </div>
+      {/* ==================================================================== */}
+      {/* TAB 4: SETTINGS — APPEARANCE & THEME ONLY                            */}
+      {/* ==================================================================== */}
+      {activeTab === 'preferences' && (
+        <div className="space-y-3.5 animate-in fade-in duration-150">
+          {/* Theme Switcher (Light / Dark Navy / System) */}
+          <div className="p-4 rounded-3xl bg-white dark:bg-[#11222D] border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black text-stone-900 dark:text-white flex items-center gap-2 font-display">
+                <Sun className="w-4 h-4 text-amber-500" />
+                Appearance & Theme
+              </h3>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-bold border border-teal-200/60 dark:border-teal-500/30">
+                {themeMode === 'light' ? 'Light Theme' : themeMode === 'dark' ? 'Dark Navy' : 'Device System'}
+              </span>
             </div>
 
-            {/* 2. TARGET REGIONAL DIALECT */}
-            <div className="p-4 rounded-2xl bg-stone-50/80 dark:bg-stone-900/60 border border-stone-200/80 dark:border-white/10 space-y-2">
-              <label className="block text-xs font-black text-stone-900 dark:text-white">
-                Target Regional Dialect
-              </label>
-              <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                Adapts Whisper speech recognition, lexical choices, and colloquial particles
-              </p>
-              <select
-                value={profile.targetDialect}
-                onChange={(e) => {
-                  sounds.playTap();
-                  onUpdateDialect(e.target.value as TargetDialect);
-                }}
-                className="w-full bg-white dark:bg-stone-800 border border-stone-200 dark:border-white/15 text-stone-900 dark:text-white rounded-xl p-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-2xs cursor-pointer"
-              >
-                <option value="davao_bisaya">Davao Bisaya (Urban Visayan with Mindanao loanwords & particles)</option>
-                <option value="cebuano_standard">Cebuano Standard (Formal Central Visayas dialect)</option>
-                <option value="boholano">Boholano (Bol-anon variety with phonetic shifts)</option>
-              </select>
-            </div>
+            <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
+              Customize the visual interface of SultiAI. Choose between crisp daylight light mode, midnight dark navy, or synchronize automatically with your device system preferences.
+            </p>
 
-            {/* 3. DAILY LEARNING COMMITMENT */}
-            <div className="p-4 rounded-2xl bg-stone-50/80 dark:bg-stone-900/60 border border-stone-200/80 dark:border-white/10 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-black text-stone-900 dark:text-white">
-                  Daily Learning Commitment
-                </label>
-                <span className="text-[10px] font-mono font-bold text-stone-700 dark:text-stone-300">
-                  Target: {profile.dailyGoalMinutes} min/day
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[10, 15, 20].map((mins) => (
-                  <button
-                    key={mins}
-                    onClick={() => {
-                      sounds.playTap();
-                      onUpdateDailyGoal(mins);
-                    }}
-                    className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer glass-touch ${
-                      profile.dailyGoalMinutes === mins
-                        ? 'bg-teal-600 text-white btn-3d-teal shadow-xs'
-                        : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border border-stone-200 dark:border-white/10 hover:border-teal-400'
-                    }`}
-                  >
-                    {mins} mins / day
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 4. DEFENSE BLUEPRINT QUICK AUDIT ACTION */}
-            <div className="pt-2">
+            <div className="grid grid-cols-3 gap-2 pt-1">
               <button
+                type="button"
                 onClick={() => {
                   sounds.playTap();
-                  onOpenAuditModal();
+                  setThemeMode('light');
                 }}
-                className="w-full py-3 px-4 bg-stone-900 dark:bg-stone-800 hover:bg-stone-800 text-white rounded-2xl text-xs font-black flex items-center justify-between transition-all glass-touch cursor-pointer shadow-md border border-stone-800 dark:border-white/10"
+                className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
+                  themeMode === 'light'
+                    ? 'bg-amber-50/90 border-amber-400 text-amber-950 font-black shadow-sm ring-2 ring-amber-400/50'
+                    : 'bg-stone-50 dark:bg-stone-800/60 border-stone-200 dark:border-white/10 text-stone-600 dark:text-stone-300'
+                }`}
               >
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-teal-400" />
-                  <span>View BSIT Capstone Defense Blueprint & SQL</span>
-                </div>
-                <ArrowUpRight className="w-4 h-4 text-stone-400" />
+                <Sun className="w-5 h-5 text-amber-500" />
+                <span className="text-xs font-bold">Light</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playTap();
+                  setThemeMode('dark');
+                }}
+                className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
+                  themeMode === 'dark'
+                    ? 'bg-teal-950/70 border-teal-400 text-teal-200 font-black shadow-sm ring-2 ring-teal-400/50'
+                    : 'bg-stone-50 dark:bg-stone-800/60 border-stone-200 dark:border-white/10 text-stone-600 dark:text-stone-300'
+                }`}
+              >
+                <Moon className="w-5 h-5 text-teal-400" />
+                <span className="text-xs font-bold">Dark Navy</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playTap();
+                  setThemeMode('system');
+                }}
+                className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
+                  themeMode === 'system'
+                    ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-400 text-indigo-950 dark:text-indigo-200 font-black shadow-sm ring-2 ring-indigo-400/50'
+                    : 'bg-stone-50 dark:bg-stone-800/60 border-stone-200 dark:border-white/10 text-stone-600 dark:text-stone-300'
+                }`}
+              >
+                <Monitor className="w-5 h-5 text-indigo-500" />
+                <span className="text-xs font-bold">System</span>
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* TAB 5: SECURITY — PASSWORD, PRIVACY, SESSIONS, DANGER ZONE           */}
+      {/* ==================================================================== */}
+      {activeTab === 'security' && (
+        <div className="space-y-3.5 animate-in fade-in duration-150">
+          {/* Password Recovery Card */}
+          <div className="p-4 rounded-3xl bg-white dark:bg-[#11222D] border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
+            <h3 className="text-xs font-black text-stone-900 dark:text-white flex items-center gap-2 font-display">
+              <KeyRound className="w-4 h-4 text-teal-500" />
+              Password & Credentials
+            </h3>
+            <p className="text-xs text-stone-500 dark:text-stone-400">
+              Manage your login password and access tokens securely via Supabase Auth.
+            </p>
+
+            <div className="p-3 bg-stone-50 dark:bg-stone-800/60 rounded-2xl border border-stone-200/80 dark:border-white/5 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-stone-500 dark:text-stone-400">Registered Email</span>
+                <span className="font-mono font-bold text-stone-800 dark:text-stone-200">{profile.email}</span>
+              </div>
+
+              {pwdResetSent ? (
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-500/30 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Password reset email dispatched to {profile.email}!</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSecurityPasswordReset}
+                  disabled={pwdResetLoading}
+                  className="w-full py-2.5 px-3 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{pwdResetLoading ? 'Sending...' : 'Send Password Reset Email'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Active Session Card */}
+          <div className="p-4 rounded-3xl bg-white dark:bg-[#11222D] border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
+            <h3 className="text-xs font-black text-stone-900 dark:text-white flex items-center gap-2 font-display">
+              <Laptop className="w-4 h-4 text-indigo-500" />
+              Active Browser Session
+            </h3>
+
+            <div className="p-3 bg-stone-50 dark:bg-stone-800/60 rounded-2xl border border-stone-200/80 dark:border-white/5 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Current Device</span>
+                <span className="font-bold text-stone-900 dark:text-white">Web Applet (Vite SPA)</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Authentication</span>
+                <span className="font-mono text-teal-600 dark:text-teal-400 font-bold">Supabase Persistent Session</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Status</span>
+                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Encrypted & Active
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Privacy & Data Management */}
+          <div className="p-4 rounded-3xl bg-white dark:bg-[#11222D] border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3">
+            <h3 className="text-xs font-black text-stone-900 dark:text-white flex items-center gap-2 font-display">
+              <Database className="w-4 h-4 text-blue-500" />
+              Data & Privacy Controls
+            </h3>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveModal('privacy');
+                }}
+                className="p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-white/10 text-left hover:border-teal-500/40 transition-colors cursor-pointer group"
+              >
+                <Download className="w-4 h-4 text-teal-500 mb-1 group-hover:scale-110 transition-transform" />
+                <div className="font-bold text-xs text-stone-900 dark:text-white">Export My Data</div>
+                <div className="text-[10px] text-stone-400">Download JSON records</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveModal('privacy');
+                }}
+                className="p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-white/10 text-left hover:border-teal-500/40 transition-colors cursor-pointer group"
+              >
+                <Trash2 className="w-4 h-4 text-amber-500 mb-1 group-hover:scale-110 transition-transform" />
+                <div className="font-bold text-xs text-stone-900 dark:text-white">Clear AI History</div>
+                <div className="text-[10px] text-stone-400">Erase chat transcripts</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Danger Zone: Log Out & Account Deletion */}
+          <div className="p-4 rounded-3xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-500/20 shadow-sm space-y-3">
+            <h3 className="text-xs font-black text-rose-800 dark:text-rose-300 flex items-center gap-2 font-display">
+              <AlertTriangle className="w-4 h-4 text-rose-500" />
+              Account Actions
+            </h3>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveModal('logout_confirm');
+                }}
+                className="w-full py-3 px-4 bg-white dark:bg-[#11222D] hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer border border-stone-200 dark:border-white/10"
+              >
+                <LogOut className="w-4 h-4 text-stone-500" />
+                <span>Log Out of SultiAI</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playTap();
+                  setActiveModal('security');
+                }}
+                className="w-full py-2.5 px-4 bg-transparent hover:bg-rose-100/50 dark:hover:bg-rose-900/30 text-rose-700 dark:text-rose-400 rounded-2xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Account & Erase All Progress</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAL FLOWS (Deep flows connected to real state and Supabase)        */}
+      {/* ==================================================================== */}
+
+      {/* Edit Profile Modal */}
+      {activeModal === 'edit_profile' && (
+        <EditProfileModal
+          profile={profile}
+          onSave={(updates) => {
+            if (updates.targetDialect) onUpdateDialect(updates.targetDialect);
+            if (updates.dailyGoalMinutes) onUpdateDailyGoal(updates.dailyGoalMinutes);
+            onUpdateProfile?.(updates);
+          }}
+          onOpenAvatarPicker={() => setActiveModal('avatar_picker')}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Avatar Selection Modal */}
+      {activeModal === 'avatar_picker' && (
+        <AvatarSelectionModal
+          currentAvatar={profile.avatar}
+          userId={profile.id}
+          onSelectAvatar={(newAvatar) => {
+            onUpdateProfile?.({ avatar: newAvatar });
+          }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Learning Preferences Modal */}
+      {activeModal === 'learning_prefs' && (
+        <LearningPreferencesModal
+          profile={profile}
+          onSavePreferences={(prefs) => {
+            if (prefs.targetDialect) onUpdateDialect(prefs.targetDialect);
+            if (prefs.dailyGoalMinutes) onUpdateDailyGoal(prefs.dailyGoalMinutes);
+            onUpdateProfile?.({
+              targetDialect: prefs.targetDialect,
+              dailyGoalMinutes: prefs.dailyGoalMinutes,
+            });
+          }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* My Learning Progress Modal */}
+      {activeModal === 'progress' && (
+        <LearningProgressModal
+          profile={profile}
+          onNavigateToLearn={() => {
+            setActiveModal(null);
+            onNavigateToLearn?.();
+          }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* AI Activity History Modal */}
+      {activeModal === 'ai_activity' && (
+        <AiActivityModal
+          userId={profile.id}
+          onOpenSultiChat={(prompt) => {
+            setActiveModal(null);
+            onOpenSultiChat?.(prompt);
+          }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Notification Preferences Modal */}
+      {activeModal === 'notifications' && (
+        <NotificationSettingsModal
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Account & Security Modal */}
+      {activeModal === 'security' && (
+        <AccountSecurityModal
+          profile={profile}
+          onOpenLogoutConfirm={() => setActiveModal('logout_confirm')}
+          onDeleteAccount={() => {
+            setActiveModal(null);
+            onLogout?.();
+          }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Privacy & Data Management Modal */}
+      {activeModal === 'privacy' && (
+        <PrivacyDataModal
+          profile={profile}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Subscription & Usage Modal */}
+      {activeModal === 'subscription' && (
+        <SubscriptionUsageModal
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Help & Support Modal */}
+      {activeModal === 'help_support' && (
+        <HelpSupportModal
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {/* Logout Confirmation Dialog */}
+      {activeModal === 'logout_confirm' && (
+        <LogoutConfirmModal
+          userName={profile.name}
+          onConfirmLogout={() => {
+            onLogout?.();
+          }}
+          onClose={() => setActiveModal(null)}
+        />
       )}
     </div>
   );

@@ -12,7 +12,12 @@ import { DialectModal } from './components/DialectModal';
 import { UserProfile, Lesson, TargetDialect, Module, DayActivity } from './types';
 import { INITIAL_MODULES, DEFAULT_WEEKLY_ACTIVITY } from './data/curriculumData';
 import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { LoginScreen } from './components/LoginScreen';
 import { addNotification } from './utils/notificationService';
+import { supabase } from './services/supabaseClient';
+import { AdminAuthProvider } from '../admin/components/AdminAuthContext';
+import { AdminDashboard } from '../admin/components/AdminDashboard';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
@@ -21,6 +26,14 @@ export default function App() {
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showDialectModal, setShowDialectModal] = useState(false);
   const [sultiPrefillPrompt, setSultiPrefillPrompt] = useState<string | undefined>();
+  const [showAdminConsole, setShowAdminConsole] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.has('admin') || window.location.pathname.startsWith('/admin');
+    }
+    return false;
+  });
+  const [showLoginScreen, setShowLoginScreen] = useState(false);
 
   // Persistent User Profile State
   const [profile, setProfile] = useState<UserProfile>(() => {
@@ -39,7 +52,7 @@ export default function App() {
     return {
       id: 'usr_genesis',
       name: 'Genesis Diaz',
-      email: 'genesis.diaz@jmc.edu.ph',
+      email: 'genesis.diaz@sultiai.ph',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
       targetDialect: 'davao_bisaya' as TargetDialect,
       dailyGoalMinutes: 15,
@@ -56,6 +69,7 @@ export default function App() {
       vocabularyMastered: 38,
       speechScoreAverage: 91,
       joinedDate: 'September 2026',
+      authProvider: 'email' as const,
     };
   });
 
@@ -75,7 +89,7 @@ export default function App() {
           id: profile.id,
           name: profile.name,
           email: profile.email,
-          role: 'Capstone Lead / Learner',
+          role: 'Learner / Scholar',
           targetDialect: profile.targetDialect,
           xp: profile.xp,
           streakDays: profile.streakDays,
@@ -290,10 +304,94 @@ export default function App() {
     }));
   };
 
+  // Update Profile attributes (name, avatar, goal, dialect, etc.)
+  const handleUpdateProfile = (updates: Partial<UserProfile>) => {
+    setProfile((prev) => ({
+      ...prev,
+      ...updates,
+    }));
+  };
+
+  // Sign out and clear private session caches safely
+  const handleLogout = async () => {
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn('Supabase logout warning:', err);
+      }
+    }
+
+    localStorage.removeItem('sultiai_user_profile');
+    localStorage.removeItem('sultiai_ai_conversations');
+    localStorage.removeItem('sultiai_ai_messages_map');
+    localStorage.removeItem('sultiai_ai_voice_sessions');
+
+    setProfile({
+      id: 'usr_guest_' + Date.now().toString(36),
+      name: 'Guest Learner',
+      email: 'learner@sultiai.ph',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
+      targetDialect: 'davao_bisaya',
+      dailyGoalMinutes: 15,
+      todayMinutes: 0,
+      xp: 0,
+      gems: 100,
+      hearts: 5,
+      maxHearts: 5,
+      streakDays: 0,
+      streakFreezesAvailable: 1,
+      weeklyActivity: DEFAULT_WEEKLY_ACTIVITY.map((d) => ({ ...d, minutes: 0, xpEarned: 0, goalMet: false })),
+      level: 'Level 1: Bisaya Beginner',
+      completedLessons: [],
+      vocabularyMastered: 0,
+      speechScoreAverage: 0,
+      joinedDate: 'October 2026',
+      authProvider: 'email',
+    });
+
+    addNotification({
+      category: 'system',
+      title: '👋 Logged Out Safely',
+      titleBisaya: 'Naka-logout na Ka',
+      message: 'Private session and cached transcripts cleared safely.',
+      iconType: 'shield',
+    });
+
+    setShowLoginScreen(true);
+  };
+
   return (
     <ThemeProvider>
-      <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#0A121D] text-stone-900 dark:text-stone-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white transition-colors duration-200">
-        {/* Top Mobile App Bar */}
+      <AuthProvider
+        onSessionChange={(session) => {
+          if (session?.user) {
+            setProfile((prev) => ({
+              ...prev,
+              id: session.user.id,
+              name: session.user.name,
+              email: session.user.email,
+              avatar: session.user.avatarUrl || prev.avatar,
+              authProvider: session.user.provider,
+            }));
+            setShowLoginScreen(false);
+          }
+        }}
+      >
+        {showAdminConsole ? (
+          <AdminAuthProvider>
+            <AdminDashboard
+              onSwitchToMobileApp={() => setShowAdminConsole(false)}
+            />
+          </AdminAuthProvider>
+        ) : showLoginScreen ? (
+          <LoginScreen
+            onSuccess={() => setShowLoginScreen(false)}
+            onContinueAsGuest={() => setShowLoginScreen(false)}
+          />
+        ) : (
+          <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#0A121D] text-stone-900 dark:text-stone-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white transition-colors duration-200">
+            {/* Top Mobile App Bar */}
             <TopHeader
               streak={profile.streakDays}
               xp={profile.xp}
@@ -302,99 +400,113 @@ export default function App() {
               dialect={profile.targetDialect}
               onOpenDialectModal={() => setShowDialectModal(true)}
               onOpenAuditModal={() => setShowAuditModal(true)}
+              onOpenAdminConsole={() => setShowAdminConsole(true)}
               onRefillHearts={handleRefillHearts}
               userName={profile.name}
+              userAvatar={profile.avatar}
               showHeroGreeting={currentTab === 'home'}
               onNavigateAction={(actionType) => {
                 if (actionType === 'learn') setCurrentTab('learn');
                 else if (actionType === 'profile') setCurrentTab('profile');
               }}
+              onOpenLogin={() => setShowLoginScreen(true)}
+              isLoggedIn={Boolean(profile.email && !profile.id.startsWith('usr_guest_'))}
             />
 
             {/* Main Viewport Content */}
             <main className="flex-1 w-full max-w-md mx-auto">
-        {currentTab === 'home' && (
-          <HomeScreen
-            profile={profile}
-            weeklyActivity={profile.weeklyActivity || DEFAULT_WEEKLY_ACTIVITY}
-            nextLesson={nextLesson}
-            onStartLesson={handleStartLesson}
-            onOpenSulti={(prompt?: string) => {
-              setSultiPrefillPrompt(prompt);
-              setCurrentTab('sulti');
-            }}
-            onGoToLearn={() => setCurrentTab('learn')}
-            onGoToProfile={() => setCurrentTab('profile')}
-            onUseStreakFreeze={handleUseStreakFreeze}
-            onOpenDialectModal={() => setShowDialectModal(true)}
-            onAwardReward={handleAwardVoiceReward}
-          />
+              {currentTab === 'home' && (
+                <HomeScreen
+                  profile={profile}
+                  weeklyActivity={profile.weeklyActivity || DEFAULT_WEEKLY_ACTIVITY}
+                  nextLesson={nextLesson}
+                  onStartLesson={handleStartLesson}
+                  onOpenSulti={(prompt?: string) => {
+                    setSultiPrefillPrompt(prompt);
+                    setCurrentTab('sulti');
+                  }}
+                  onGoToLearn={() => setCurrentTab('learn')}
+                  onGoToProfile={() => setCurrentTab('profile')}
+                  onUseStreakFreeze={handleUseStreakFreeze}
+                  onOpenDialectModal={() => setShowDialectModal(true)}
+                  onAwardReward={handleAwardVoiceReward}
+                />
+              )}
+
+              {currentTab === 'learn' && (
+                <LearnScreen
+                  modules={modules}
+                  completedLessons={profile.completedLessons}
+                  onStartLesson={handleStartLesson}
+                  profile={profile}
+                  onAddPracticeMinutes={handleAddPracticeMinutes}
+                  onOpenSulti={(prompt?: string) => {
+                    setSultiPrefillPrompt(prompt);
+                    setCurrentTab('sulti');
+                  }}
+                  onGoToProfile={() => setCurrentTab('profile')}
+                />
+              )}
+
+              {currentTab === 'sulti' && (
+                <SultiScreen
+                  targetDialect={profile.targetDialect}
+                  onActivityPerformed={handleSultiActivity}
+                  initialPrompt={sultiPrefillPrompt}
+                />
+              )}
+
+              {currentTab === 'community' && <CommunityScreen />}
+
+              {currentTab === 'profile' && (
+                <ProfileScreen
+                  profile={profile}
+                  onUpdateDialect={handleUpdateDialect}
+                  onUpdateDailyGoal={handleUpdateDailyGoal}
+                  onOpenAuditModal={() => setShowAuditModal(true)}
+                  onUpdateProfile={handleUpdateProfile}
+                  onNavigateToLearn={() => setCurrentTab('learn')}
+                  onOpenSultiChat={(prompt) => {
+                    setSultiPrefillPrompt(prompt);
+                    setCurrentTab('sulti');
+                  }}
+                  onLogout={handleLogout}
+                  onOpenLogin={() => setShowLoginScreen(true)}
+                />
+              )}
+            </main>
+
+            {/* Fixed Bottom Tab Navigation */}
+            <Navigation
+              currentTab={currentTab}
+              onTabChange={(tab) => setCurrentTab(tab)}
+            />
+
+            {/* Interactive Lesson Player Modal */}
+            {activeLesson && (
+              <LessonPlayer
+                lesson={activeLesson}
+                onClose={() => setActiveLesson(null)}
+                onComplete={handleCompleteLesson}
+              />
+            )}
+
+            {/* Capstone Project Blueprint & Audit Modal */}
+            {showAuditModal && (
+              <CapstoneAuditModal onClose={() => setShowAuditModal(false)} />
+            )}
+
+            {/* Regional Dialect Selector Modal */}
+            {showDialectModal && (
+              <DialectModal
+                currentDialect={profile.targetDialect}
+                onSelect={handleUpdateDialect}
+                onClose={() => setShowDialectModal(false)}
+              />
+            )}
+          </div>
         )}
-
-        {currentTab === 'learn' && (
-          <LearnScreen
-            modules={modules}
-            completedLessons={profile.completedLessons}
-            onStartLesson={handleStartLesson}
-            profile={profile}
-            onAddPracticeMinutes={handleAddPracticeMinutes}
-            onOpenSulti={(prompt?: string) => {
-              setSultiPrefillPrompt(prompt);
-              setCurrentTab('sulti');
-            }}
-            onGoToProfile={() => setCurrentTab('profile')}
-          />
-        )}
-
-        {currentTab === 'sulti' && (
-          <SultiScreen
-            targetDialect={profile.targetDialect}
-            onActivityPerformed={handleSultiActivity}
-            initialPrompt={sultiPrefillPrompt}
-          />
-        )}
-
-        {currentTab === 'community' && <CommunityScreen />}
-
-        {currentTab === 'profile' && (
-          <ProfileScreen
-            profile={profile}
-            onUpdateDialect={handleUpdateDialect}
-            onUpdateDailyGoal={handleUpdateDailyGoal}
-            onOpenAuditModal={() => setShowAuditModal(true)}
-          />
-        )}
-      </main>
-
-      {/* Fixed Bottom Tab Navigation */}
-      <Navigation
-        currentTab={currentTab}
-        onTabChange={(tab) => setCurrentTab(tab)}
-      />
-
-      {/* Interactive Lesson Player Modal */}
-      {activeLesson && (
-        <LessonPlayer
-          lesson={activeLesson}
-          onClose={() => setActiveLesson(null)}
-          onComplete={handleCompleteLesson}
-        />
-      )}
-
-      {/* Capstone Project Blueprint & Audit Modal */}
-      {showAuditModal && (
-        <CapstoneAuditModal onClose={() => setShowAuditModal(false)} />
-      )}
-
-      {/* Regional Dialect Selector Modal */}
-      {showDialectModal && (
-        <DialectModal
-          currentDialect={profile.targetDialect}
-          onSelect={handleUpdateDialect}
-          onClose={() => setShowDialectModal(false)}
-        />
-      )}
-      </div>
-  </ThemeProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

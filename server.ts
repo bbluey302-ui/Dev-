@@ -12,6 +12,7 @@ import {
   upsertLearnerAccount,
   isSupabaseServerConfigured,
 } from './server/supabaseServer';
+import { adminRouter } from './admin/api/adminRoutes';
 
 dotenv.config();
 
@@ -19,9 +20,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3030;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '50mb' }));
+
+// Mount the admin router so both learner & admin APIs are available on port 3000
+app.use('/api/admin', adminRouter);
 
 // Initialize Google GenAI
 const apiKey = process.env.GEMINI_API_KEY;
