@@ -123,9 +123,16 @@ export const LearningToolkitDrawer: React.FC<LearningToolkitDrawerProps> = ({
                     #{tool.num}
                   </span>
                 </div>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400 line-clamp-1">
-                  {tool.quickDescription}
+                <p className="text-[11px] text-stone-600 dark:text-stone-300 font-medium line-clamp-1 mt-0.5">
+                  {tool.purpose}
                 </p>
+                {tool.gamificationMechanic && (
+                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 px-2 py-0.5 rounded-md border border-teal-200/50 dark:border-teal-600/30">
+                      🎮 {tool.gamificationMechanic}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0" />

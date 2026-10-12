@@ -38,7 +38,15 @@ export const LanguageJourneyMap: React.FC<LanguageJourneyMapProps> = ({
   onGoToProfile,
 }) => {
   // Current active language path
-  const [selectedLanguage, setSelectedLanguage] = useState<MajorLanguageId>('cebuano');
+  const [selectedLanguage, setSelectedLanguage] = useState<MajorLanguageId>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sultiai_selected_language');
+      if (saved === 'cebuano' || saved === 'filipino' || saved === 'english') {
+        return saved;
+      }
+    }
+    return 'cebuano';
+  });
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
 
   // Modals state
@@ -215,21 +223,24 @@ export const LanguageJourneyMap: React.FC<LanguageJourneyMapProps> = ({
                     localStorage.setItem('sultiai_selected_language', lang.id);
                   }
                 }}
-                className={`p-2.5 rounded-2xl flex items-center gap-2.5 transition-all cursor-pointer border text-left ${
+                className={`p-3 rounded-2xl flex items-center gap-2.5 transition-all cursor-pointer border text-left group relative overflow-hidden ${
                   isSelected
-                    ? 'bg-teal-600 border-teal-500 text-white shadow-sm ring-2 ring-teal-400/40'
-                    : 'bg-stone-50 dark:bg-stone-900/60 border-stone-200/80 dark:border-white/5 text-stone-700 dark:text-stone-300 hover:border-teal-500/40 hover:bg-stone-100 dark:hover:bg-stone-850'
+                    ? 'bg-teal-600 border-teal-500 text-white shadow-md ring-2 ring-teal-400/50 scale-[1.01]'
+                    : 'bg-stone-50 dark:bg-stone-900/60 border-stone-200/80 dark:border-white/5 text-stone-700 dark:text-stone-300 hover:border-teal-500/40 hover:bg-stone-100 dark:hover:bg-stone-850 hover:shadow-xs'
                 }`}
               >
-                <span className="text-xl shrink-0">{lang.flag}</span>
-                <div className="min-w-0">
-                  <div className={`font-display font-black text-xs leading-tight truncate ${isSelected ? 'text-white' : 'text-stone-900 dark:text-white'}`}>
+                <span className="text-2xl shrink-0 transition-transform group-hover:scale-110">{lang.flag}</span>
+                <div className="min-w-0 flex-1">
+                  <div className={`font-display font-black text-xs sm:text-sm leading-tight truncate ${isSelected ? 'text-white' : 'text-stone-900 dark:text-white'}`}>
                     {lang.name}
                   </div>
-                  <div className={`text-[10px] truncate ${isSelected ? 'text-teal-100' : 'text-stone-400 dark:text-stone-500'}`}>
+                  <div className={`text-[10px] truncate mt-0.5 ${isSelected ? 'text-teal-100' : 'text-stone-400 dark:text-stone-500'}`}>
                     {lang.native}
                   </div>
                 </div>
+                {isSelected && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse shrink-0" />
+                )}
               </button>
             );
           })}

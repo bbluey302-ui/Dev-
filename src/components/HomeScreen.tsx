@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Globe, Sparkles, Volume2, ChevronRight, Award, Compass, Gift, X, Flame 
+  Sparkles, Volume2, Gift, X, Flame 
 } from 'lucide-react';
 import { UserProfile, Lesson, DayActivity, ContinueLearningActivity, SultiRecommendation } from '../types';
 import { speakBisaya } from '../utils/audio';
@@ -10,8 +10,6 @@ import { VoicePathModal } from './voice/VoicePathModal';
 import { getStoredVoiceProgress } from '../data/voiceGamificationData';
 
 // Modular Dashboard Subcomponents
-import { DailyMissionCard } from './dashboard/DailyMissionCard';
-import { ContinueLearningCard } from './dashboard/ContinueLearningCard';
 import { QuickPracticeRow } from './dashboard/QuickPracticeRow';
 import { ProgressSnapshot } from './dashboard/ProgressSnapshot';
 import { SultiRecommendationCard } from './dashboard/SultiRecommendationCard';
@@ -108,20 +106,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
-      {/* ZONE 2: TODAY'S MISSION (HERO COMPONENT ⭐) */}
-      <DailyMissionCard
-        todayMinutes={profile.todayMinutes}
-        goalMinutes={profile.dailyGoalMinutes}
-        streakDays={profile.streakDays}
-        onContinuePractice={() => onStartLesson(nextLesson)}
-      />
 
-      {/* ZONE 3: CONTINUE LEARNING (PRIMARY LEARNING ACTION ⭐) */}
-      <ContinueLearningCard
-        activity={continueActivity}
-        fallbackLesson={nextLesson}
-        onContinue={(lesson) => onStartLesson(lesson)}
-      />
 
       {/* ZONE 4: QUICK PRACTICE ROW */}
       <QuickPracticeRow
@@ -272,21 +257,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </p>
         </div>
       </div>
-
-      {/* Navigation Shortcut to Full Curriculum */}
-      <button
-        onClick={() => {
-          sounds.playTap();
-          onGoToLearn();
-        }}
-        className="w-full py-3 px-4 rounded-2xl border border-stone-200/90 dark:border-white/10 bg-white dark:bg-[#11222D] hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-800 dark:text-white text-xs font-bold flex items-center justify-between transition-all glass-touch cursor-pointer shadow-2xs"
-      >
-        <div className="flex items-center gap-2">
-          <Compass className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-          <span className="font-display">Browse All 4 Curriculum Units & Phrasebook</span>
-        </div>
-        <ChevronRight className="w-4 h-4 text-stone-400" />
-      </button>
     </div>
   );
 };

@@ -3,7 +3,7 @@ import {
   Play, ChevronRight, Mic, MessageSquare, Layers, BookOpen, 
   Flame, Award, Zap, Sparkles, Target, ArrowRight, CheckCircle2, 
   Circle, Trophy, BarChart2, Star, ShieldCheck, Compass, Check,
-  UserPlus, UserCheck, ExternalLink, Users
+  UserPlus, UserCheck, ExternalLink, Users, Map
 } from 'lucide-react';
 import { Lesson, UserProfile, Module } from '../../types';
 import { CourseData, COURSES } from '../../data/coursesData';
@@ -43,12 +43,19 @@ export const LearnDashboard: React.FC<LearnDashboardProps> = ({
   const speakingScore = profile?.speechScoreAverage ?? 86;
   const vocabCount = profile?.vocabularyMastered ?? 74;
 
-  // Course category filter state
-  const [courseCategoryFilter, setCourseCategoryFilter] = useState<'all' | 'cebuano' | 'filipino' | 'english'>('all');
+  // Course category filter state: default to Cebuano or saved preference (3 language buttons only)
+  const [courseCategoryFilter, setCourseCategoryFilter] = useState<'cebuano' | 'filipino' | 'english'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sultiai_selected_language');
+      if (saved === 'cebuano' || saved === 'filipino' || saved === 'english') {
+        return saved as 'cebuano' | 'filipino' | 'english';
+      }
+    }
+    return 'cebuano';
+  });
 
   // Filter courses by selected language category
   const filteredCourses = courses.filter((c) => {
-    if (courseCategoryFilter === 'all') return true;
     return c.languageCategory === courseCategoryFilter;
   });
 
@@ -91,147 +98,46 @@ export const LearnDashboard: React.FC<LearnDashboardProps> = ({
     <div className="space-y-5 animate-in fade-in duration-300">
       
       {/* ========================================================================= */}
-      {/* HEADER SECTION                                                           */}
+      {/* 1. COURSES & ROADMAPS (INTERACTIVE LEARNING PATHS) — PRIMARY VIEW         */}
       {/* ========================================================================= */}
-      <div className="bg-white dark:bg-[#11222D] rounded-3xl p-4 sm:p-5 border border-stone-200/90 dark:border-white/10 shadow-xs space-y-3 relative overflow-hidden transition-colors">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="font-display font-black text-lg sm:text-xl text-stone-900 dark:text-white leading-tight truncate">
-              {getGreeting()}
-            </h1>
-            <p className="text-xs text-stone-500 dark:text-stone-400 font-medium">
-              Ready to continue? Keep your fluency momentum.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-500/30 text-amber-950 dark:text-amber-200 shrink-0 font-mono font-black text-xs shadow-2xs">
-            <Flame className="w-4 h-4 fill-amber-500 text-amber-600 dark:text-amber-400" />
-            <span>{streak} Days</span>
-          </div>
-        </div>
-
-        {/* Quick KPI Stats Bar */}
-        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-stone-100 dark:border-white/5 text-center">
-          <div className="py-1 px-1.5 bg-stone-50 dark:bg-stone-800/50 rounded-xl">
-            <div className="text-[10px] text-stone-400 font-bold uppercase truncate">Daily Goal</div>
-            <div className="font-mono font-black text-xs text-teal-700 dark:text-teal-300">
-              3 / 5 activities
-            </div>
-          </div>
-
-          <div className="py-1 px-1.5 bg-stone-50 dark:bg-stone-800/50 rounded-xl">
-            <div className="text-[10px] text-stone-400 font-bold uppercase truncate">Weekly Progress</div>
-            <div className="font-mono font-black text-xs text-blue-600 dark:text-blue-400">
-              72%
-            </div>
-          </div>
-
-          <div className="py-1 px-1.5 bg-stone-50 dark:bg-stone-800/50 rounded-xl">
-            <div className="text-[10px] text-stone-400 font-bold uppercase truncate">Pronunciation</div>
-            <div className="font-mono font-black text-xs text-indigo-600 dark:text-indigo-400">
-              82% Ring
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 1. CONTINUE LEARNING — PRIMARY HERO SECTION                               */}
-      {/* ========================================================================= */}
-      <div className="space-y-2">
+      <div className="space-y-3.5">
+        {/* Section Header */}
         <div className="flex items-center justify-between text-xs px-1">
-          <span className="font-display font-black uppercase tracking-wider text-stone-500 dark:text-stone-400 text-[11px]">
-            Continue Learning
-          </span>
-          <span className="text-[10px] text-teal-700 dark:text-teal-300 font-bold font-mono">
-            Primary Goal
-          </span>
-        </div>
-
-        <div className="bg-gradient-to-br from-teal-50/80 via-white to-stone-50/50 dark:from-[#11222D] dark:via-[#132735] dark:to-[#0f1d27] rounded-3xl p-5 border border-teal-200/90 dark:border-teal-500/30 shadow-xs space-y-3.5 relative overflow-hidden transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-2xl pointer-events-none" />
-
-          {/* Module Header */}
-          <div className="flex items-center justify-between relative z-10">
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-2xl bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400 border border-teal-200/60 dark:border-teal-500/30 shadow-2xs">
+              <Map className="w-4 h-4" />
+            </span>
             <div>
-              <span className="text-[10px] font-mono font-black tracking-wider uppercase text-teal-800 dark:text-teal-300 bg-teal-100/70 dark:bg-teal-950/80 px-2 py-0.5 rounded-md border border-teal-200/60 dark:border-teal-500/30">
-                Beginner Bisaya
-              </span>
-              <p className="text-xs text-stone-500 dark:text-stone-400 font-semibold pt-1">
-                Module 03 · Real Conversations
+              <h2 className="font-display font-black uppercase tracking-wider text-stone-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                <span>Courses & Roadmaps</span>
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200/60 dark:border-teal-700/40 font-bold uppercase">
+                  Interactive Paths
+                </span>
+              </h2>
+              <p className="text-[10.5px] text-stone-500 dark:text-stone-400 font-medium">
+                Choose your learning language and explore step-by-step milestone roadmaps
               </p>
             </div>
-
-            <span className="text-[11px] font-mono font-bold text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-500/30 px-2.5 py-0.5 rounded-full">
-              ~10 min
-            </span>
           </div>
-
-          {/* Current Topic */}
-          <div className="space-y-0.5 relative z-10">
-            <h2 className="font-display font-black text-xl text-stone-900 dark:text-white leading-tight">
-              Asking for Directions
-            </h2>
-            <p className="text-xs text-stone-500 dark:text-stone-400 italic">
-              "Asa dapit ang sakayan padulong Matina?"
-            </p>
-          </div>
-
-          {/* Visual Progress Bar */}
-          <div className="space-y-1 relative z-10">
-            <div className="flex items-center justify-between text-[11px] font-mono">
-              <span className="text-stone-500 dark:text-stone-400">Progress</span>
-              <span className="font-black text-teal-700 dark:text-teal-300">72% complete</span>
-            </div>
-            <div className="w-full bg-stone-100 dark:bg-stone-800 rounded-full h-2.5 p-0.5 overflow-hidden border border-stone-200/50 dark:border-white/10 shadow-inner">
-              <div
-                className="bg-gradient-to-r from-teal-500 to-teal-400 h-full rounded-full transition-all duration-500 shadow-xs"
-                style={{ width: '72%' }}
-              />
-            </div>
-          </div>
-
-          {/* Action CTA */}
-          <button
-            onClick={() => {
-              sounds.playTap();
-              onStartLesson(nextLesson);
-            }}
-            className="w-full min-h-[46px] bg-teal-600 hover:bg-teal-500 dark:bg-teal-500 dark:hover:bg-teal-400 text-white dark:text-stone-950 rounded-2xl text-xs font-black py-3 px-4 flex items-center justify-center gap-2 transition-all btn-3d-teal shadow-xs cursor-pointer relative z-10"
-          >
-            <span>Continue Learning →</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 2. MY COURSES (LEARNING ROADMAP WITH LANGUAGE CATEGORY TABS)             */}
-      {/* ========================================================================= */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between text-xs px-1">
-          <span className="font-display font-black uppercase tracking-wider text-stone-500 dark:text-stone-400 text-[11px]">
-            Courses & Roadmaps
-          </span>
-          <span className="text-[10px] text-stone-400 font-medium">
-            Choose your language path
-          </span>
         </div>
 
-        {/* Course Language Category Filter Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-stone-100 dark:bg-stone-800/60 rounded-2xl border border-stone-200/80 dark:border-white/5 text-xs font-bold overflow-x-auto scrollbar-none">
+        {/* Course Language Category Filter Tabs (3 languages: Cebuano/Bisaya, Filipino/Tagalog, English) */}
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-stone-100 dark:bg-stone-800/60 rounded-2xl border border-stone-200/80 dark:border-white/5 text-xs font-bold">
           {[
-            { id: 'all', label: 'All Courses' },
             { id: 'cebuano', label: '🇵🇭 Cebuano / Bisaya' },
             { id: 'filipino', label: '🇵🇭 Filipino / Tagalog' },
-            { id: 'english', label: '🇺🇸 English' },
+            { id: 'english', label: '🌎 English' },
           ].map((cat) => (
             <button
               key={cat.id}
               onClick={() => {
                 sounds.playTap();
-                setCourseCategoryFilter(cat.id as any);
+                setCourseCategoryFilter(cat.id as 'cebuano' | 'filipino' | 'english');
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('sultiai_selected_language', cat.id);
+                }
               }}
-              className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all cursor-pointer ${
+              className={`px-2 py-2.5 rounded-xl text-center whitespace-nowrap transition-all cursor-pointer font-bold text-xs truncate ${
                 courseCategoryFilter === cat.id
                   ? 'bg-teal-600 text-white shadow-xs'
                   : 'text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
@@ -242,57 +148,107 @@ export const LearnDashboard: React.FC<LearnDashboardProps> = ({
           ))}
         </div>
 
-        {/* Dynamic Categorized Course Cards */}
-        <div className="space-y-2">
-          {filteredCourses.map((courseItem) => (
-            <div 
-              key={courseItem.id}
-              onClick={() => {
-                sounds.playTap();
-                onSelectCourse(courseItem);
-              }}
-              className="p-4 bg-white dark:bg-[#11222D] hover:bg-stone-50 dark:hover:bg-[#152B37] rounded-3xl border border-stone-200/90 dark:border-white/10 shadow-xs transition-all cursor-pointer group space-y-2.5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">
-                      {courseItem.languageCategory === 'filipino' ? '🇵🇭' : courseItem.languageCategory === 'english' ? '🇺🇸' : '🇵🇭'}
+        {/* Dynamic Categorized Course Cards with Rich Roadmap Previews */}
+        <div className="space-y-3">
+          {filteredCourses.map((courseItem) => {
+            const flag = courseItem.languageCategory === 'filipino' ? '🇵🇭' : courseItem.languageCategory === 'english' ? '🌎' : '🇵🇭';
+            return (
+              <div 
+                key={courseItem.id}
+                onClick={() => {
+                  sounds.playTap();
+                  onSelectCourse(courseItem);
+                }}
+                className="p-4 sm:p-5 bg-white dark:bg-[#11222D] hover:bg-stone-50 dark:hover:bg-[#152B37] rounded-3xl border border-stone-200/90 dark:border-white/10 shadow-xs hover:shadow-sm transition-all cursor-pointer group space-y-3.5 relative overflow-hidden"
+              >
+                {/* Accent glow corner */}
+                <div className="absolute top-0 right-0 w-28 h-28 bg-teal-500/5 dark:bg-teal-400/5 rounded-full blur-xl pointer-events-none" />
+
+                {/* Card Title Row */}
+                <div className="flex items-start justify-between gap-3 relative z-10">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-lg">{flag}</span>
+                      <h3 className="font-display font-black text-sm sm:text-base text-stone-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                        {courseItem.title}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-black uppercase bg-teal-50 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-200/60 dark:border-teal-500/30">
+                        {courseItem.level}
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-500 dark:text-stone-400 font-medium">
+                      {courseItem.subtitle}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-end shrink-0">
+                    <span className="font-mono font-black text-xs text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 border border-teal-200/60 dark:border-teal-700/40 px-2.5 py-1 rounded-xl shadow-2xs">
+                      {courseItem.progressPercent}%
                     </span>
-                    <h3 className="font-display font-black text-sm text-stone-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
-                      {courseItem.title}
-                    </h3>
-                    <span className="px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase bg-teal-50 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 border border-teal-200/60 dark:border-teal-500/30">
-                      {courseItem.level}
+                    <span className="text-[9px] font-mono text-stone-400 dark:text-stone-500 mt-0.5">
+                      {courseItem.completedLessonsCount}/{courseItem.totalLessons} lessons
                     </span>
                   </div>
-                  <p className="text-xs text-stone-500 dark:text-stone-400 pt-0.5">
-                    {courseItem.subtitle}
-                  </p>
                 </div>
 
-                <span className="font-mono font-black text-xs text-teal-700 dark:text-teal-300 bg-stone-100 dark:bg-stone-800 px-2.5 py-1 rounded-xl shrink-0">
-                  {courseItem.progressPercent}%
-                </span>
-              </div>
+                {/* Roadmap Milestone Steps Ribbon */}
+                {courseItem.roadmapSteps && courseItem.roadmapSteps.length > 0 && (
+                  <div className="p-2.5 bg-stone-50 dark:bg-stone-900/50 rounded-2xl border border-stone-150 dark:border-white/5 space-y-1.5 relative z-10">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-stone-400 dark:text-stone-500 font-bold uppercase tracking-wider">
+                      <span>Curriculum Roadmap</span>
+                      <span className="text-teal-600 dark:text-teal-400">
+                        {courseItem.roadmapSteps.length} Milestones
+                      </span>
+                    </div>
 
-              {/* Progress Bar & Hours */}
-              <div className="space-y-1">
-                <div className="w-full bg-stone-100 dark:bg-stone-800 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-teal-500 rounded-full"
-                    style={{ width: `${courseItem.progressPercent}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[10px] font-mono text-stone-400">
-                  <span>{courseItem.totalLessons} Lessons · {courseItem.estimatedHours}</span>
-                  <span className="text-teal-600 dark:text-teal-400 font-bold group-hover:translate-x-0.5 transition-transform">
-                    Open Syllabus →
-                  </span>
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                      {courseItem.roadmapSteps.slice(0, 5).map((step, idx) => (
+                        <div
+                          key={step.id}
+                          className="flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg bg-white dark:bg-[#11222D] border border-stone-200/70 dark:border-white/10 text-[10px] font-mono font-bold text-stone-600 dark:text-stone-300"
+                        >
+                          <span className="w-3.5 h-3.5 rounded-full bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300 text-[9px] flex items-center justify-center font-black">
+                            {idx + 1}
+                          </span>
+                          <span className="truncate max-w-[90px]">{step.title}</span>
+                        </div>
+                      ))}
+                      {courseItem.roadmapSteps.length > 5 && (
+                        <span className="text-[10px] font-mono text-stone-400 px-1 font-bold">
+                          +{courseItem.roadmapSteps.length - 5}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Progress Bar & Open Roadmap Button */}
+                <div className="space-y-2 relative z-10">
+                  <div className="w-full bg-stone-100 dark:bg-stone-800 h-2 rounded-full overflow-hidden p-0.5 border border-stone-200/50 dark:border-white/5">
+                    <div
+                      className="h-full bg-gradient-to-r from-teal-500 to-teal-400 rounded-full transition-all duration-300"
+                      style={{ width: `${courseItem.progressPercent}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-mono text-stone-400">
+                    <span>{courseItem.totalLessons} Lessons · {courseItem.estimatedHours}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sounds.playTap();
+                        onSelectCourse(courseItem);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <span>Explore Roadmap</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -491,6 +447,11 @@ export const LearnDashboard: React.FC<LearnDashboardProps> = ({
                 <p className="text-[10px] text-stone-500 dark:text-stone-400 line-clamp-1 mt-0.5 font-medium">
                   {mod.purpose}
                 </p>
+                {mod.gamificationBadge && (
+                  <span className="inline-block mt-1 text-[8px] font-mono font-bold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-200/50 dark:border-teal-700/40 truncate max-w-full">
+                    {mod.gamificationBadge}
+                  </span>
+                )}
               </div>
 
               {/* Progress Bar + Arrow */}

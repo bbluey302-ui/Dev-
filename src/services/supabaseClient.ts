@@ -126,3 +126,185 @@ export async function fetchGeneratedMedia(): Promise<GeneratedMediaRecord[]> {
     return [];
   }
 }
+
+// ----------------------------------------------------------------------------
+// Speaking City Mission Persistence Helpers
+// ----------------------------------------------------------------------------
+
+export interface SpeakingMissionAttemptRecord {
+  missionId: string;
+  destinationId: string;
+  language: string;
+  userTranscript: string;
+  audioUrl?: string;
+  overallScore: number;
+  scores: {
+    taskCompletion: number;
+    vocabulary: number;
+    languageUse: number;
+    communication: number;
+  };
+  passed: boolean;
+  feedback: {
+    summary: string;
+    improvementTip: string;
+    suggestedBetterResponse: string;
+  };
+  xpEarned: number;
+}
+
+export async function saveSpeakingAttemptToSupabase(
+  attempt: SpeakingMissionAttemptRecord,
+  userId?: string
+): Promise<void> {
+  if (supabase && userId) {
+    try {
+      await supabase.from('speaking_mission_attempts').insert([
+        {
+          user_id: userId,
+          mission_id: attempt.missionId,
+          destination_id: attempt.destinationId,
+          language: attempt.language,
+          user_transcript: attempt.userTranscript,
+          audio_url: attempt.audioUrl || null,
+          overall_score: attempt.overallScore,
+          scores: attempt.scores,
+          passed: attempt.passed,
+          feedback: attempt.feedback,
+          xp_earned: attempt.xpEarned,
+        },
+      ]);
+    } catch (err) {
+      console.warn('Supabase speaking attempt save fallback to local:', err);
+    }
+  }
+
+  // Also persist to local attempts history
+  try {
+    const key = `sultiai_speaking_attempts_${attempt.language}`;
+    const existing = JSON.parse(localStorage.getItem(key) || '[]');
+    localStorage.setItem(key, JSON.stringify([attempt, ...existing].slice(0, 50)));
+  } catch {
+    // ignore
+  }
+}
+
+export async function syncSpeakingProgressToSupabase(
+  userId: string,
+  language: string,
+  completedMissions: string[],
+  unlockedDestinations: string[],
+  totalXp: number,
+  highestScore: number
+): Promise<void> {
+  if (!supabase || !userId) return;
+  try {
+    await supabase.from('speaking_mission_progress').upsert(
+      [
+        {
+          user_id: userId,
+          language,
+          completed_missions: completedMissions,
+          unlocked_destinations: unlockedDestinations,
+          total_speaking_xp: totalXp,
+          total_missions_completed: completedMissions.length,
+          highest_score: highestScore,
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: 'user_id,language' }
+    );
+  } catch (err) {
+    console.warn('Supabase speaking progress upsert error:', err);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Scenario Practice — Interactive Story Adventure Persistence Helpers
+// ----------------------------------------------------------------------------
+
+export interface ScenarioAttemptRecord {
+  scenarioId: string;
+  category: string;
+  language: string;
+  endingId: string;
+  completedObjectives: string[];
+  overallScore: number;
+  speechTranscript?: string;
+  evaluationFeedback?: {
+    summary: string;
+    improvementTip: string;
+    suggestedAlternative: string;
+  };
+  passed: boolean;
+  xpEarned: number;
+}
+
+export async function saveScenarioAttemptToSupabase(
+  attempt: ScenarioAttemptRecord,
+  userId?: string
+): Promise<void> {
+  if (supabase && userId) {
+    try {
+      await supabase.from('scenario_attempts').insert([
+        {
+          user_id: userId,
+          scenario_id: attempt.scenarioId,
+          category: attempt.category,
+          language: attempt.language,
+          ending_id: attempt.endingId,
+          completed_objectives: attempt.completedObjectives,
+          overall_score: attempt.overallScore,
+          speech_transcript: attempt.speechTranscript || null,
+          evaluation_feedback: attempt.evaluationFeedback || {},
+          passed: attempt.passed,
+          xp_earned: attempt.xpEarned,
+        },
+      ]);
+    } catch (err) {
+      console.warn('Supabase scenario attempt save fallback to local:', err);
+    }
+  }
+
+  // Also persist to local attempts cache
+  try {
+    const key = `sultiai_scenario_attempts_${attempt.language}`;
+    const existing = JSON.parse(localStorage.getItem(key) || '[]');
+    localStorage.setItem(key, JSON.stringify([attempt, ...existing].slice(0, 50)));
+  } catch {
+    // ignore
+  }
+}
+
+export async function syncScenarioProgressToSupabase(
+  userId: string,
+  language: string,
+  completedScenarios: string[],
+  unlockedCategories: string[],
+  totalXp: number,
+  highestScore: number,
+  currentScenarioId?: string
+): Promise<void> {
+  if (!supabase || !userId) return;
+  try {
+    await supabase.from('scenario_progress').upsert(
+      [
+        {
+          user_id: userId,
+          language,
+          completed_scenarios: completedScenarios,
+          current_scenario_id: currentScenarioId || null,
+          unlocked_categories: unlockedCategories,
+          total_scenario_xp: totalXp,
+          total_scenarios_completed: completedScenarios.length,
+          highest_score: highestScore,
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: 'user_id,language' }
+    );
+  } catch (err) {
+    console.warn('Supabase scenario progress upsert error:', err);
+  }
+}
+

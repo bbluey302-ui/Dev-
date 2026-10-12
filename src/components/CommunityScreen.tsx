@@ -144,10 +144,10 @@ export const CommunityScreen: React.FC = () => {
       {/* Community Header & Action */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-display font-black text-xl text-stone-900">
+          <h2 className="font-display font-black text-xl text-stone-900 dark:text-white">
             SultiAI Community Hub
           </h2>
-          <p className="text-xs text-stone-500 font-medium">
+          <p className="text-xs text-stone-500 dark:text-stone-300 font-medium">
             Learn from native speakers & fellow Bisaya learners
           </p>
         </div>
@@ -164,38 +164,16 @@ export const CommunityScreen: React.FC = () => {
         </button>
       </div>
 
-      {/* Search & Filter Strip */}
-      <div className="space-y-2">
-        <div className="relative">
-          <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search discussions & phrases..."
-            className="w-full bg-white text-stone-900 placeholder:text-stone-400 text-xs pl-10 pr-4 py-3 rounded-2xl border border-stone-200/90 focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm"
-          />
-        </div>
-
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {['All', 'Expression', 'Cultural Tip', 'Question', 'Grammar'].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => {
-                sounds.playTap();
-                setSelectedCategoryFilter(cat);
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                selectedCategoryFilter === cat
-                  ? 'bg-teal-600 text-white shadow-sm btn-3d-teal'
-                  : 'bg-white hover:bg-stone-50 text-stone-600 border border-stone-200'
-              }`}
-            >
-              {cat === 'All' ? '🌟 All Discussions' : cat}
-            </button>
-          ))}
-        </div>
+      {/* Search Input Bar */}
+      <div className="relative">
+        <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search discussions & phrases..."
+          className="w-full bg-white dark:bg-stone-900 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 text-xs pl-10 pr-4 py-3 rounded-2xl border border-stone-200/90 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm"
+        />
       </div>
 
       {/* Posts Feed */}
@@ -207,7 +185,7 @@ export const CommunityScreen: React.FC = () => {
           return (
             <div
               key={post.id}
-              className={`bg-white rounded-3xl p-4 border border-stone-200/90 shadow-sm space-y-3 transition-opacity ${
+              className={`bg-white dark:bg-[#11222D] rounded-3xl p-4 border border-stone-200/90 dark:border-white/10 shadow-sm space-y-3 transition-opacity ${
                 isReported ? 'opacity-40 pointer-events-none' : ''
               }`}
             >
@@ -218,22 +196,22 @@ export const CommunityScreen: React.FC = () => {
                     src={post.authorAvatar}
                     alt={post.authorName}
                     referrerPolicy="no-referrer"
-                    className="w-9 h-9 rounded-full object-cover border-2 border-stone-200 shadow-sm"
+                    className="w-9 h-9 rounded-full object-cover border-2 border-stone-200 dark:border-stone-700 shadow-sm"
                   />
                   <div>
-                    <div className="text-xs font-black text-stone-900 font-display">
+                    <div className="text-xs font-black text-stone-900 dark:text-white font-display">
                       {post.authorName}
                     </div>
-                    <div className="text-[10px] text-teal-700 font-semibold flex items-center gap-1">
+                    <div className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold flex items-center gap-1">
                       <span>{post.authorTag}</span>
                       <span>·</span>
-                      <span className="text-stone-400 font-normal">{post.timestamp}</span>
+                      <span className="text-stone-400 dark:text-stone-500 font-normal">{post.timestamp}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] bg-stone-100 text-stone-700 px-2.5 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 px-2.5 py-0.5 rounded-full font-bold">
                     {post.category}
                   </span>
                   <button
@@ -248,38 +226,38 @@ export const CommunityScreen: React.FC = () => {
 
               {/* Title & Bisaya Body */}
               <div className="space-y-1.5">
-                <h3 className="font-display font-black text-sm text-stone-900 leading-snug">
+                <h3 className="font-display font-black text-sm text-stone-900 dark:text-white leading-snug">
                   {post.title}
                 </h3>
-                <div className="text-xs text-stone-900 bg-stone-50 p-3 rounded-2xl border border-stone-100 leading-relaxed font-bold flex items-start justify-between gap-2">
+                <div className="text-xs text-stone-900 dark:text-stone-100 bg-stone-50 dark:bg-stone-800/70 p-3 rounded-2xl border border-stone-100 dark:border-stone-700/60 leading-relaxed font-bold flex items-start justify-between gap-2">
                   <span>"{post.contentBisaya}"</span>
                   <button
                     onClick={() => handlePlayAudio(post.id, post.contentBisaya)}
                     className={`p-1.5 rounded-xl shrink-0 transition-all cursor-pointer ${
-                      isPlayingAudio ? 'bg-teal-500 text-white animate-pulse' : 'bg-teal-50 hover:bg-teal-100 text-teal-700'
+                      isPlayingAudio ? 'bg-teal-500 text-white animate-pulse' : 'bg-teal-50 dark:bg-teal-950/80 hover:bg-teal-100 dark:hover:bg-teal-900/80 text-teal-700 dark:text-teal-300'
                     }`}
                     title="Listen to phrase"
                   >
                     <Volume2 className="w-4 h-4" />
                   </button>
                 </div>
-                <p className="text-xs text-stone-600 italic leading-relaxed font-medium">
+                <p className="text-xs text-stone-600 dark:text-stone-300 italic leading-relaxed font-medium">
                   Translation: {post.contentEnglish}
                 </p>
                 {post.dialectNote && (
-                  <div className="text-[11px] text-teal-900 bg-teal-50/80 p-2.5 rounded-xl border border-teal-100 font-medium">
+                  <div className="text-[11px] text-teal-900 dark:text-teal-200 bg-teal-50/80 dark:bg-teal-950/40 p-2.5 rounded-xl border border-teal-100 dark:border-teal-800/40 font-medium">
                     💡 {post.dialectNote}
                   </div>
                 )}
               </div>
 
               {/* Action Bar */}
-              <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs text-stone-500">
+              <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-white/5 text-xs text-stone-500 dark:text-stone-400">
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => handleToggleLike(post.id)}
                     className={`flex items-center gap-1.5 font-bold transition-all min-h-[36px] cursor-pointer ${
-                      post.likedByMe ? 'text-rose-500' : 'hover:text-stone-800'
+                      post.likedByMe ? 'text-rose-500' : 'hover:text-stone-800 dark:hover:text-stone-200'
                     }`}
                   >
                     <Heart className={`w-4 h-4 ${post.likedByMe ? 'fill-rose-500 animate-heart' : ''}`} />
@@ -291,15 +269,15 @@ export const CommunityScreen: React.FC = () => {
                       sounds.playTap();
                       setSelectedPost(selectedPost?.id === post.id ? null : post);
                     }}
-                    className="flex items-center gap-1.5 hover:text-stone-800 font-bold transition-colors min-h-[36px] cursor-pointer"
+                    className="flex items-center gap-1.5 hover:text-stone-800 dark:hover:text-stone-200 font-bold transition-colors min-h-[36px] cursor-pointer"
                   >
-                    <MessageCircle className="w-4 h-4 text-teal-600" />
+                    <MessageCircle className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                     <span className="font-mono tabular-nums">{post.comments.length} replies</span>
                   </button>
                 </div>
 
                 {isReported && (
-                  <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-md">
                     Flagged for Review
                   </span>
                 )}
@@ -307,18 +285,18 @@ export const CommunityScreen: React.FC = () => {
 
               {/* Inline Comments Section */}
               {selectedPost?.id === post.id && (
-                <div className="pt-2 border-t border-stone-100 space-y-2.5 animate-in fade-in duration-200">
+                <div className="pt-2 border-t border-stone-100 dark:border-white/5 space-y-2.5 animate-in fade-in duration-200">
                   <div className="space-y-2">
                     {post.comments.length === 0 ? (
-                      <p className="text-[11px] text-stone-400 italic">No comments yet. Be the first to share an answer!</p>
+                      <p className="text-[11px] text-stone-400 dark:text-stone-500 italic">No comments yet. Be the first to share an answer!</p>
                     ) : (
                       post.comments.map((c) => (
-                        <div key={c.id} className="p-3 bg-stone-50 rounded-2xl space-y-1 text-xs border border-stone-100">
+                        <div key={c.id} className="p-3 bg-stone-50 dark:bg-stone-800/60 rounded-2xl space-y-1 text-xs border border-stone-100 dark:border-stone-700/50">
                           <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-bold text-stone-900 font-display">{c.authorName}</span>
-                            <span className="text-stone-400 font-mono text-[10px]">{c.timestamp}</span>
+                            <span className="font-bold text-stone-900 dark:text-white font-display">{c.authorName}</span>
+                            <span className="text-stone-400 dark:text-stone-500 font-mono text-[10px]">{c.timestamp}</span>
                           </div>
-                          <p className="text-stone-700 text-xs font-normal leading-relaxed">{c.text}</p>
+                          <p className="text-stone-700 dark:text-stone-300 text-xs font-normal leading-relaxed">{c.text}</p>
                         </div>
                       ))
                     )}
@@ -332,7 +310,7 @@ export const CommunityScreen: React.FC = () => {
                       onChange={(e) => setNewCommentText(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
                       placeholder="Add a friendly reply or clarification..."
-                      className="flex-1 bg-stone-100 text-stone-900 placeholder:text-stone-400 text-xs px-3.5 py-2.5 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 min-h-[42px]"
+                      className="flex-1 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 text-xs px-3.5 py-2.5 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 min-h-[42px] border border-transparent dark:border-white/5"
                     />
                     <button
                       onClick={() => handleAddComment(post.id)}
@@ -351,14 +329,14 @@ export const CommunityScreen: React.FC = () => {
       {/* New Post Modal */}
       {showNewPostModal && (
         <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl border border-stone-200">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-              <h3 className="font-display font-black text-sm text-stone-900">
+          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl border border-stone-200 dark:border-white/10">
+            <div className="flex items-center justify-between border-b border-stone-100 dark:border-white/5 pb-2">
+              <h3 className="font-display font-black text-sm text-stone-900 dark:text-white">
                 Share a Bisaya Learning Post
               </h3>
               <button
                 onClick={() => setShowNewPostModal(false)}
-                className="text-stone-400 hover:text-stone-700 p-1 cursor-pointer font-bold"
+                className="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 p-1 cursor-pointer font-bold"
               >
                 ✕
               </button>
@@ -366,13 +344,13 @@ export const CommunityScreen: React.FC = () => {
 
             <form onSubmit={handleCreatePost} className="space-y-3 text-xs">
               <div>
-                <label className="block text-stone-700 font-bold mb-1">
+                <label className="block text-stone-700 dark:text-stone-300 font-bold mb-1">
                   Category
                 </label>
                 <select
                   value={newPostCategory}
                   onChange={(e) => setNewPostCategory(e.target.value as any)}
-                  className="w-full bg-stone-100 p-2.5 rounded-xl border border-stone-200 text-xs font-bold focus:ring-2 focus:ring-teal-500"
+                  className="w-full bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-white p-2.5 rounded-xl border border-stone-200 dark:border-white/10 text-xs font-bold focus:ring-2 focus:ring-teal-500"
                 >
                   <option value="Expression">Local Expression & Slang</option>
                   <option value="Question">Question / Meaning Clarification</option>
@@ -381,7 +359,7 @@ export const CommunityScreen: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-stone-700 font-bold mb-1">
+                <label className="block text-stone-700 dark:text-stone-300 font-bold mb-1">
                   Title
                 </label>
                 <input
@@ -389,13 +367,13 @@ export const CommunityScreen: React.FC = () => {
                   value={newPostTitle}
                   onChange={(e) => setNewPostTitle(e.target.value)}
                   placeholder="e.g. When do locals use 'Lugar lang'?"
-                  className="w-full bg-stone-100 p-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-teal-500"
+                  className="w-full bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 p-2.5 rounded-xl border border-stone-200 dark:border-white/10 text-xs focus:ring-2 focus:ring-teal-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-stone-700 font-bold mb-1">
+                <label className="block text-stone-700 dark:text-stone-300 font-bold mb-1">
                   Bisaya Phrase or Query
                 </label>
                 <textarea
@@ -403,13 +381,13 @@ export const CommunityScreen: React.FC = () => {
                   onChange={(e) => setNewPostBisaya(e.target.value)}
                   placeholder="Write the Bisaya phrase or question..."
                   rows={2}
-                  className="w-full bg-stone-100 p-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-teal-500"
+                  className="w-full bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 p-2.5 rounded-xl border border-stone-200 dark:border-white/10 text-xs focus:ring-2 focus:ring-teal-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-stone-700 font-bold mb-1">
+                <label className="block text-stone-700 dark:text-stone-300 font-bold mb-1">
                   English Translation / Explanation
                 </label>
                 <input
@@ -417,7 +395,7 @@ export const CommunityScreen: React.FC = () => {
                   value={newPostEnglish}
                   onChange={(e) => setNewPostEnglish(e.target.value)}
                   placeholder="e.g. Stop here, driver! Used in jeepneys."
-                  className="w-full bg-stone-100 p-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-teal-500"
+                  className="w-full bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 p-2.5 rounded-xl border border-stone-200 dark:border-white/10 text-xs focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
@@ -425,7 +403,7 @@ export const CommunityScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowNewPostModal(false)}
-                  className="py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
+                  className="py-2.5 rounded-xl bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs"
                 >
                   Cancel
                 </button>
@@ -444,29 +422,29 @@ export const CommunityScreen: React.FC = () => {
       {/* Report Post Modal */}
       {reportModalPostId && (
         <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-5 max-w-xs w-full text-center space-y-4 shadow-2xl border border-stone-200">
-            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl mx-auto flex items-center justify-center border border-rose-200">
+          <div className="bg-white dark:bg-[#11222D] rounded-3xl p-5 max-w-xs w-full text-center space-y-4 shadow-2xl border border-stone-200 dark:border-white/10">
+            <div className="w-12 h-12 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-2xl mx-auto flex items-center justify-center border border-rose-200 dark:border-rose-900/40">
               <AlertTriangle className="w-6 h-6" />
             </div>
 
             <div className="space-y-1">
-              <h3 className="font-display font-black text-base text-stone-900">
+              <h3 className="font-display font-black text-base text-stone-900 dark:text-white">
                 Report this Community Post?
               </h3>
-              <p className="text-xs text-stone-500">
+              <p className="text-xs text-stone-500 dark:text-stone-400">
                 Help keep SultiAI safe and supportive for all language learners.
               </p>
             </div>
 
             {reportSuccess ? (
-              <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold">
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold border border-emerald-200 dark:border-emerald-800/40">
                 ✓ Report submitted for review!
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   onClick={() => setReportModalPostId(null)}
-                  className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold"
+                  className="py-2.5 px-3 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 rounded-xl text-xs font-bold"
                 >
                   Cancel
                 </button>

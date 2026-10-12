@@ -1,13 +1,11 @@
 import React from 'react';
-import { Mic, Brain, MessageSquare, Music, FileAudio, ArrowRight } from 'lucide-react';
+import { Mic, Brain, MessageSquare } from 'lucide-react';
 import { sounds } from '../../utils/soundEffects';
 
 interface QuickPracticeRowProps {
   onStartVoice: () => void;
   onStartVocabulary: () => void;
   onStartChat: () => void;
-  onStartTranscribe?: () => void;
-  onStartMusic?: () => void;
   voiceLevel?: number;
   voiceBadgesCount?: number;
 }
@@ -16,8 +14,6 @@ export const QuickPracticeRow: React.FC<QuickPracticeRowProps> = ({
   onStartVoice,
   onStartVocabulary,
   onStartChat,
-  onStartTranscribe,
-  onStartMusic,
   voiceLevel = 1,
   voiceBadgesCount = 0,
 }) => {
@@ -25,12 +21,12 @@ export const QuickPracticeRow: React.FC<QuickPracticeRowProps> = ({
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs">
         <span className="font-display font-extrabold uppercase tracking-wider text-stone-500 dark:text-stone-400 text-[11px]">
-          Quick Practice & AI Studio
+          Quick Practice
         </span>
         <span className="text-[10px] text-stone-400 dark:text-stone-500 font-medium">Fast 3-5 min drills</span>
       </div>
 
-      {/* Row 1: Core Daily Drills */}
+      {/* Core Daily Drills */}
       <div className="grid grid-cols-3 gap-2">
         {/* Action 1: Speaking Practice (Voice Gamification Path & Badges) */}
         <button
@@ -47,20 +43,20 @@ export const QuickPracticeRow: React.FC<QuickPracticeRowProps> = ({
             <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-500/30 flex items-center justify-center font-bold group-hover:scale-105 transition-transform shadow-2xs">
               <Mic className="w-4 h-4" />
             </div>
-            <span className="text-[8px] font-black uppercase font-mono px-1.5 py-0.5 rounded-md bg-gradient-to-r from-blue-600 to-teal-600 text-white shadow-2xs tracking-wider">
-              2 Paths
+            <span className="text-[8px] font-black uppercase font-mono px-1.5 py-0.5 rounded-md bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-2xs tracking-wider">
+              City Map
             </span>
           </div>
 
           <div className="mt-1.5">
             <div className="font-display font-black text-xs text-stone-900 dark:text-white leading-tight flex items-center gap-1">
-              <span>Voice Path</span>
+              <span>Speaking City</span>
             </div>
-            <div className="text-[9.5px] text-blue-600 dark:text-blue-400 font-bold mt-0.5 flex items-center gap-1">
-              <span>Bisaya · Filipino</span>
+            <div className="text-[9.5px] text-teal-600 dark:text-teal-400 font-bold mt-0.5 flex items-center gap-1">
+              <span>5 Destinations</span>
             </div>
             <div className="text-[9px] text-stone-400 dark:text-stone-500 font-mono font-medium">
-              Lv. 1–5 (Hard)
+              Bisaya · Filipino
             </div>
           </div>
         </button>
@@ -103,51 +99,6 @@ export const QuickPracticeRow: React.FC<QuickPracticeRowProps> = ({
             </div>
             <div className="text-[10px] text-stone-500 dark:text-stone-400 font-medium mt-0.5">
               AI companion
-            </div>
-          </div>
-        </button>
-      </div>
-
-      {/* Row 2: AI Multimedia Tools (Audio Transcribe & Music) */}
-      <div className="grid grid-cols-2 gap-2">
-        {/* Tool 1: Microphone Transcribe (gemini-3.5-transcribe) */}
-        <button
-          onClick={() => {
-            sounds.playTap();
-            onStartTranscribe?.();
-          }}
-          className="p-2.5 bg-gradient-to-r from-blue-50 to-indigo-50/60 dark:from-[#11222D] dark:to-[#152B37] hover:from-blue-100/70 hover:to-indigo-100/70 dark:hover:from-[#152B37] dark:hover:to-[#1b3443] rounded-2xl border border-blue-200/70 dark:border-blue-500/30 text-left transition-all active:scale-[0.98] cursor-pointer shadow-2xs group flex items-center gap-2.5"
-        >
-          <div className="w-8 h-8 rounded-xl bg-blue-600 dark:bg-blue-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
-            <FileAudio className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="font-display font-black text-xs text-stone-900 dark:text-white leading-tight flex items-center gap-1">
-              <span>Transcribe Audio</span>
-            </div>
-            <div className="text-[10px] text-blue-700 dark:text-blue-300 font-mono font-medium truncate">
-              gemini-3.5-transcribe
-            </div>
-          </div>
-        </button>
-
-        {/* Tool 2: Generate Music (Lyria 3) */}
-        <button
-          onClick={() => {
-            sounds.playTap();
-            onStartMusic?.();
-          }}
-          className="p-2.5 bg-gradient-to-r from-purple-50 to-pink-50/60 dark:from-[#11222D] dark:to-[#1a2336] hover:from-purple-100/70 hover:to-pink-100/70 dark:hover:from-[#152B37] dark:hover:to-[#222f47] rounded-2xl border border-purple-200/70 dark:border-purple-500/30 text-left transition-all active:scale-[0.98] cursor-pointer shadow-2xs group flex items-center gap-2.5"
-        >
-          <div className="w-8 h-8 rounded-xl bg-indigo-600 dark:bg-indigo-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
-            <Music className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="font-display font-black text-xs text-stone-900 dark:text-white leading-tight flex items-center gap-1">
-              <span>Generate Music</span>
-            </div>
-            <div className="text-[10px] text-indigo-700 dark:text-indigo-300 font-mono font-medium truncate">
-              lyria-3-clip / pro
             </div>
           </div>
         </button>

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, ShieldCheck, Database, Copy, Check, Terminal, FileCode } from 'lucide-react';
+import { X, CheckCircle2, ShieldCheck, Database, Copy, Check, Terminal, FileCode, BookOpen, ExternalLink, Sparkles, Layers, Trophy, Target } from 'lucide-react';
 import { CAPSTONE_CHECKLIST_DATA } from '../data/curriculumData';
 import { CapstoneRequirement } from '../types';
+import { MODULE_GAMIFICATION_MATRIX } from '../data/moduleGamificationMatrix';
+import { TOOLKIT_MODULES } from '../data/toolkitModulesData';
 
 interface CapstoneAuditModalProps {
   onClose: () => void;
@@ -183,7 +185,7 @@ CREATE TRIGGER set_lesson_attempts_updated_at
     FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();`;
 
 export const CapstoneAuditModal: React.FC<CapstoneAuditModalProps> = ({ onClose }) => {
-  const [modalTab, setModalTab] = useState<'checklist' | 'supabase_rls'>('checklist');
+  const [modalTab, setModalTab] = useState<'checklist' | 'gamification' | 'supabase_rls' | 'ph_data'>('checklist');
   const [items, setItems] = useState<CapstoneRequirement[]>(CAPSTONE_CHECKLIST_DATA);
   const [selectedItem, setSelectedItem] = useState<CapstoneRequirement | null>(items[0]);
   const [copied, setCopied] = useState(false);
@@ -222,27 +224,49 @@ export const CapstoneAuditModal: React.FC<CapstoneAuditModalProps> = ({ onClose 
         </div>
 
         {/* Tab Switcher */}
-        <div className="px-4 pt-2 pb-2 bg-stone-950 border-b border-stone-800 flex gap-2">
+        <div className="px-3 pt-2 pb-2 bg-stone-950 border-b border-stone-800 flex gap-1 overflow-x-auto scrollbar-none">
           <button
             onClick={() => setModalTab('checklist')}
-            className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+            className={`py-1.5 px-2.5 rounded-xl text-[10px] font-semibold transition-all shrink-0 ${
               modalTab === 'checklist'
                 ? 'bg-stone-800 text-teal-300 border border-teal-500/40'
                 : 'text-stone-400 hover:text-stone-200'
             }`}
           >
-            Checklist (11/11)
+            Checklist (11)
+          </button>
+          <button
+            onClick={() => setModalTab('gamification')}
+            className={`py-1.5 px-2.5 rounded-xl text-[10px] font-semibold flex items-center justify-center gap-1 transition-all shrink-0 ${
+              modalTab === 'gamification'
+                ? 'bg-stone-800 text-teal-300 border border-teal-500/40'
+                : 'text-stone-400 hover:text-stone-200'
+            }`}
+          >
+            <Sparkles className="w-3 h-3 text-teal-400" />
+            <span>13 Gamified Modules</span>
           </button>
           <button
             onClick={() => setModalTab('supabase_rls')}
-            className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-1.5 px-2.5 rounded-xl text-[10px] font-semibold flex items-center justify-center gap-1 transition-all shrink-0 ${
               modalTab === 'supabase_rls'
                 ? 'bg-stone-800 text-teal-300 border border-teal-500/40'
                 : 'text-stone-400 hover:text-stone-200'
             }`}
           >
-            <Database className="w-3.5 h-3.5 text-teal-400" />
-            <span>Supabase RLS</span>
+            <Database className="w-3 h-3 text-teal-400" />
+            <span>Supabase</span>
+          </button>
+          <button
+            onClick={() => setModalTab('ph_data')}
+            className={`py-1.5 px-2.5 rounded-xl text-[10px] font-semibold flex items-center justify-center gap-1 transition-all shrink-0 ${
+              modalTab === 'ph_data'
+                ? 'bg-stone-800 text-teal-300 border border-teal-500/40'
+                : 'text-stone-400 hover:text-stone-200'
+            }`}
+          >
+            <BookOpen className="w-3 h-3 text-teal-400" />
+            <span>PH Data & AI</span>
           </button>
         </div>
 
@@ -306,6 +330,67 @@ export const CapstoneAuditModal: React.FC<CapstoneAuditModalProps> = ({ onClose 
           </>
         )}
 
+        {/* TAB: 13 GAMIFIED MODULES MATRIX */}
+        {modalTab === 'gamification' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="p-3 bg-teal-950/40 border border-teal-800/60 rounded-2xl space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-teal-300">
+                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                <span>13 Purpose-Driven Learning Modules & Gamification Matrix</span>
+              </div>
+              <p className="text-[10px] text-stone-300 leading-relaxed font-normal">
+                Aligned with Capstone title: <em>"SultiAI: An AI-Powered Community Language and Communication Hub for Non-Native Speakers Using Whisper Speech Recognition and BERT-Based NLP"</em>. Each module couples its specific pedagogical purpose to a distinct gamification mechanic.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {TOOLKIT_MODULES.map((mod) => {
+                const spec = MODULE_GAMIFICATION_MATRIX[mod.id];
+                return (
+                  <div
+                    key={mod.id}
+                    className="p-3 bg-stone-950 rounded-2xl border border-stone-800 space-y-1.5 hover:border-teal-500/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{mod.icon}</span>
+                        <div>
+                          <div className="font-display font-bold text-xs text-white">
+                            #{mod.num} · {mod.title}
+                          </div>
+                          <div className="text-[10px] text-teal-400 font-medium">
+                            {mod.purpose}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-mono bg-stone-900 text-stone-300 px-2 py-0.5 rounded border border-stone-800">
+                        {mod.progressPercent}% Active
+                      </span>
+                    </div>
+
+                    {spec && (
+                      <div className="p-2 bg-stone-900/80 rounded-xl space-y-1 text-[10px] border border-stone-800/60">
+                        <div className="flex items-start gap-1">
+                          <span className="text-teal-400 font-bold shrink-0">🎯 Purpose:</span>
+                          <span className="text-stone-300">{spec.primaryPurpose}</span>
+                        </div>
+                        <div className="flex items-start gap-1">
+                          <span className="text-amber-400 font-bold shrink-0">🎮 Gameplay:</span>
+                          <span className="text-stone-300 font-medium">{spec.gamificationMechanic}</span>
+                        </div>
+                        <div className="flex items-center justify-between pt-0.5 text-[9px] font-mono text-stone-400">
+                          <span>Badge: {spec.badgeMilestone}</span>
+                          <span className="text-teal-300 font-bold">{spec.mechanicLabel}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* TAB 2: SUPABASE RLS MIGRATION */}
         {modalTab === 'supabase_rls' && (
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -361,6 +446,124 @@ export const CapstoneAuditModal: React.FC<CapstoneAuditModalProps> = ({ onClose 
             {/* Research Note */}
             <div className="p-2.5 bg-stone-950/80 rounded-xl border border-stone-800 text-[10px] text-stone-400 leading-normal">
               🔒 <span className="font-semibold text-stone-300">Security Rule Compliance:</span> Users can strictly read and modify only their own data rows. Automated signup triggers maintain zero orphaned records.
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: PHILIPPINE DATA & AI ARCHITECTURE */}
+        {modalTab === 'ph_data' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+            {/* Header Banner */}
+            <div className="p-3 bg-gradient-to-br from-teal-950/40 via-stone-950 to-stone-900 rounded-2xl border border-teal-500/30 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🇵🇭</span>
+                <span className="font-bold text-xs text-white">Philippine Linguistic & Cultural Grounding</span>
+              </div>
+              <p className="text-[11px] text-stone-300 leading-relaxed">
+                SultiAI integrates authoritative Philippine language resources and cultural etiquette without requiring costly from-scratch foundation model pretraining.
+              </p>
+            </div>
+
+            {/* Pillar 1: 3-Way Architectural Separation */}
+            <div className="p-3 bg-stone-950 rounded-2xl border border-stone-800 space-y-2">
+              <span className="text-xs font-bold text-teal-300 uppercase tracking-wider block">
+                1. Three Core Architectural Pillars
+              </span>
+              <div className="space-y-2 text-[11px]">
+                <div className="p-2 bg-stone-900/80 rounded-xl border border-stone-800/80">
+                  <div className="font-semibold text-stone-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-teal-400" />
+                    Language Data
+                  </div>
+                  <p className="text-stone-400 text-[10px] mt-0.5">
+                    Words, grammatical focus markers (<span className="text-teal-300 font-mono">ang, sa, ug</span>), aspect inflections (<span className="text-teal-300 font-mono">nag-, mi-, gi-</span>), phonetic syllabification, and spoken phrases.
+                  </p>
+                </div>
+                <div className="p-2 bg-stone-900/80 rounded-xl border border-stone-800/80">
+                  <div className="font-semibold text-stone-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    Cultural & Historical Context
+                  </div>
+                  <p className="text-stone-400 text-[10px] mt-0.5">
+                    Visayan customs: politeness via vocal inflection and <span className="text-amber-300 font-mono">"palihog"</span> (never "po/opo"), Davao particle blending (<span className="text-amber-300 font-mono">gud, bitaw, man</span>), tabo markets, jeepney code.
+                  </p>
+                </div>
+                <div className="p-2 bg-stone-900/80 rounded-xl border border-stone-800/80">
+                  <div className="font-semibold text-stone-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-400" />
+                    AI Capabilities Tier
+                  </div>
+                  <p className="text-stone-400 text-[10px] mt-0.5">
+                    Gemini 3.8 Flash multi-turn reasoning, mBERT intent classification (8 intents), Whisper speech ASR + Word Error Rate (WER) scoring.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pillar 2: Authoritative Philippine Sources */}
+            <div className="p-3 bg-stone-950 rounded-2xl border border-stone-800 space-y-2">
+              <span className="text-xs font-bold text-teal-300 uppercase tracking-wider block">
+                2. Authoritative Philippine Sources
+              </span>
+              <div className="space-y-2 text-[11px]">
+                <div className="p-2.5 bg-stone-900/80 rounded-xl border border-stone-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white">Komisyon sa Wikang Filipino (KWF)</span>
+                    <span className="text-[9px] bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded font-mono">Tagalog / Filipino</span>
+                  </div>
+                  <p className="text-stone-400 text-[10px]">
+                    <strong>KWF Diksiyonaryo</strong> (kwfdiksiyonaryo.ph) & <strong>Repositoryo ng mga Wika ng Pilipinas</strong> (kwfwikaatkultura.ph) for official spelling, grammatical structures, and national language inventory (130–195 living languages).
+                  </p>
+                </div>
+
+                <div className="p-2.5 bg-stone-900/80 rounded-xl border border-stone-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white">Akademyang Bisaya</span>
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">Cebuano / Bisaya</span>
+                  </div>
+                  <p className="text-stone-400 text-[10px]">
+                    <strong>English–Visayan Cebuano Dictionary</strong> for standard Visayan vocabulary, avoiding accidental Tagalog cross-contamination or invalid synthetic loanwords.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pillar 3: AI Implementation Strategy */}
+            <div className="p-3 bg-stone-950 rounded-2xl border border-stone-800 space-y-2">
+              <span className="text-xs font-bold text-teal-300 uppercase tracking-wider block">
+                3. Three-Tier AI Strategy (Capstone Defense)
+              </span>
+              <div className="grid grid-cols-1 gap-2 text-[10px]">
+                <div className="p-2 bg-stone-900/90 rounded-xl border border-emerald-500/30">
+                  <div className="flex items-center justify-between font-semibold text-emerald-300">
+                    <span>Tier 1: Curated Scaffolding & System Prompts</span>
+                    <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.5 rounded">Active in App</span>
+                  </div>
+                  <p className="text-stone-400 mt-1">
+                    Carefully authored 13 learning modules, verified phonetics, and structured system instructions ensuring high linguistic fidelity with 0 model pretraining cost.
+                  </p>
+                </div>
+
+                <div className="p-2 bg-stone-900/90 rounded-xl border border-sky-500/30">
+                  <div className="flex items-center justify-between font-semibold text-sky-300">
+                    <span>Tier 2: Knowledge Base & RAG Grounding</span>
+                    <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1 py-0.5 rounded">Active in App</span>
+                  </div>
+                  <p className="text-stone-400 mt-1">
+                    Google Maps Grounding (Davao locations) + Google Search Grounding for current cultural events + mBERT intent routing.
+                  </p>
+                </div>
+
+                <div className="p-2 bg-stone-900/90 rounded-xl border border-purple-500/30">
+                  <div className="flex items-center justify-between font-semibold text-purple-300">
+                    <span>Tier 3: Fine-Tuning & Speech Corpus</span>
+                    <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1 py-0.5 rounded">Future Roadmap</span>
+                  </div>
+                  <p className="text-stone-400 mt-1">
+                    Collection of verified Visayan native speaker audio samples to fine-tune acoustic phoneme models for localized accents (Davao, Cebu, Bohol).
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -29,10 +29,10 @@ export const LearnScreen: React.FC<LearnScreenProps> = ({
   onAddPracticeMinutes,
   onGoToProfile,
 }) => {
-  // Navigation View: 'journey_map' = Game-like level map (Candy Crush / Duolingo style)
-  //                  'dashboard' = Summary overview & tutors
+  // Navigation View: 'dashboard' = Courses & Roadmaps overview & tutors
+  //                  'journey_map' = Game-like level map (Candy Crush / Duolingo style)
   //                  'course_view' = Detailed syllabus roadmap
-  const [currentView, setCurrentView] = useState<'journey_map' | 'dashboard' | 'course_view'>('journey_map');
+  const [currentView, setCurrentView] = useState<'journey_map' | 'dashboard' | 'course_view'>('dashboard');
   const [selectedCourse, setSelectedCourse] = useState<CourseData>(COURSES[0]);
   const [activeQuickTool, setActiveQuickTool] = useState<string | null>(null);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
